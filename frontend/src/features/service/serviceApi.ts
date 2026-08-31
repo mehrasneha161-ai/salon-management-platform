@@ -1,13 +1,17 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { axiosBaseQuery } from '../../utils/axiosBaseQuery'
 import { API_ROUTES } from '../../constants'
-import { ApiResponse, SalonService, ServicePackage } from '../../types'
+import { ApiResponse, SalonService, ServicePackage, ServiceCategory } from '../../types'
 
 export const serviceApi = createApi({
   reducerPath: 'serviceApi',
   baseQuery: axiosBaseQuery(),
-  tagTypes: ['Service', 'Package'],
+  tagTypes: ['Service', 'Package', 'Category'],
   endpoints: (builder) => ({
+    getCategories: builder.query<ApiResponse<ServiceCategory[]>, void>({
+      query: () => ({ url: API_ROUTES.CATEGORIES, method: 'GET' }),
+      providesTags: ['Category'],
+    }),
     getServices: builder.query<ApiResponse<SalonService[]>, { categoryId?: string; outletId?: string }>({
       query: ({ categoryId, outletId } = {}) => {
         const params = new URLSearchParams()
@@ -44,6 +48,7 @@ export const serviceApi = createApi({
 })
 
 export const {
+  useGetCategoriesQuery,
   useGetServicesQuery,
   useCreateServiceMutation,
   useUpdateServiceMutation,

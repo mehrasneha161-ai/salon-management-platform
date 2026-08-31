@@ -64,4 +64,7 @@ public class Booking extends BaseEntity {
 
     @Column
     private String notes;
+
+    @Column(name = "reminder_sent", nullable = false)
+    private boolean reminderSent = false;
 }

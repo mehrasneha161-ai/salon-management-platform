@@ -1,8 +1,11 @@
 package com.salon.app.module.staff.controller;
 
 import com.salon.app.module.auth.repository.UserRepository;
+import com.salon.app.module.staff.dto.request.LeaveRequest;
 import com.salon.app.module.staff.dto.request.RegisterStaffRequest;
+import com.salon.app.module.staff.dto.request.UpdateShiftRequest;
 import com.salon.app.module.staff.dto.response.AttendanceResponse;
+import com.salon.app.module.staff.dto.response.LeaveResponse;
 import com.salon.app.module.staff.dto.response.StaffResponse;
 import com.salon.app.module.staff.service.StaffService;
 import com.salon.app.shared.enums.StaffStatus;
@@ -33,6 +36,14 @@ public class StaffController {
             @RequestParam(required = false) UUID outletId,
             @RequestParam(required = false) StaffStatus status) {
         return ResponseEntity.ok(ApiResponse.success(staffService.getStaff(outletId, status)));
+    }
+
+    // Must be declared before /{id} so "me" isn't parsed as a UUID path variable.
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<StaffResponse>> getMyProfile(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success(staffService.getMyProfile(resolveUserId(userDetails))));
     }
 
     @GetMapping("/{id}")
@@ -73,6 +84,34 @@ public class StaffController {
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month) {
         return ResponseEntity.ok(ApiResponse.success(staffService.getAttendance(id, year, month)));
+    }
+
+    @PutMapping("/{id}/shift")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<StaffResponse>> updateShift(
+            @PathVariable UUID id, @RequestBody UpdateShiftRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Shift updated", staffService.updateShift(id, request)));
+    }
+
+    @PostMapping("/{id}/leave")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ResponseEntity<ApiResponse<LeaveResponse>> addLeave(
+            @PathVariable UUID id, @Valid @RequestBody LeaveRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Leave added", staffService.addLeave(id, request)));
+    }
+
+    @GetMapping("/{id}/leave")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ResponseEntity<ApiResponse<List<LeaveResponse>>> getLeaves(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(staffService.getLeaves(id)));
+    }
+
+    @DeleteMapping("/leave/{leaveId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> cancelLeave(@PathVariable UUID leaveId) {
+        staffService.cancelLeave(leaveId);
+        return ResponseEntity.ok(ApiResponse.success("Leave cancelled", null));
     }
 
     private UUID resolveUserId(UserDetails userDetails) {

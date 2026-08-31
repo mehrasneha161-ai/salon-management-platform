@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { RootState } from './app/store'
+import type { RootState } from './app/store'
 import { APP_ROUTES } from './constants'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -13,8 +13,10 @@ import BookingPage from './pages/customer/BookingPage'
 import BookingHistoryPage from './pages/customer/BookingHistoryPage'
 import GalleryPage from './pages/customer/GalleryPage'
 import StaffDashboard from './pages/staff/StaffDashboard'
+import StaffAttendancePage from './pages/staff/StaffAttendancePage'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminBookingsPage from './pages/admin/AdminBookingsPage'
+import AdminOutletsPage from './pages/admin/AdminOutletsPage'
 import AdminStaffPage from './pages/admin/AdminStaffPage'
 import AdminServicesPage from './pages/admin/AdminServicesPage'
 import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage'
@@ -60,6 +62,7 @@ function App() {
       <Route element={<ProtectedRoute allowedRoles={['STAFF']} />}>
         <Route element={<StaffLayout />}>
           <Route path={APP_ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
+          <Route path={APP_ROUTES.STAFF.ATTENDANCE} element={<StaffAttendancePage />} />
         </Route>
       </Route>
 
@@ -70,6 +73,7 @@ function App() {
           <Route path={APP_ROUTES.ADMIN.BOOKINGS} element={<AdminBookingsPage />} />
           <Route path={APP_ROUTES.ADMIN.STAFF} element={<AdminStaffPage />} />
           <Route path={APP_ROUTES.ADMIN.SERVICES} element={<AdminServicesPage />} />
+          <Route path={APP_ROUTES.ADMIN.OUTLETS} element={<AdminOutletsPage />} />
           <Route path={APP_ROUTES.ADMIN.ANALYTICS} element={<AdminAnalyticsPage />} />
           <Route path={APP_ROUTES.ADMIN.NOTIFICATIONS} element={<AdminNotificationsPage />} />
           <Route path={APP_ROUTES.ADMIN.GALLERY} element={<AdminGalleryPage />} />

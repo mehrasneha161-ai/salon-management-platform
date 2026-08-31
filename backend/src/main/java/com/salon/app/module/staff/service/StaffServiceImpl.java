@@ -4,12 +4,17 @@ import com.salon.app.module.auth.entity.User;
 import com.salon.app.module.auth.repository.UserRepository;
 import com.salon.app.module.outlet.entity.Outlet;
 import com.salon.app.module.outlet.repository.OutletRepository;
+import com.salon.app.module.staff.dto.request.LeaveRequest;
 import com.salon.app.module.staff.dto.request.RegisterStaffRequest;
+import com.salon.app.module.staff.dto.request.UpdateShiftRequest;
 import com.salon.app.module.staff.dto.response.AttendanceResponse;
+import com.salon.app.module.staff.dto.response.LeaveResponse;
 import com.salon.app.module.staff.dto.response.StaffResponse;
 import com.salon.app.module.staff.entity.StaffAttendance;
+import com.salon.app.module.staff.entity.StaffLeave;
 import com.salon.app.module.staff.entity.StaffProfile;
 import com.salon.app.module.staff.repository.StaffAttendanceRepository;
+import com.salon.app.module.staff.repository.StaffLeaveRepository;
 import com.salon.app.module.staff.repository.StaffProfileRepository;
 import com.salon.app.shared.enums.StaffStatus;
 import com.salon.app.shared.enums.UserRole;
@@ -33,6 +38,7 @@ public class StaffServiceImpl implements StaffService {
 
     private final StaffProfileRepository staffProfileRepository;
     private final StaffAttendanceRepository attendanceRepository;
+    private final StaffLeaveRepository leaveRepository;
     private final UserRepository userRepository;
     private final OutletRepository outletRepository;
     private final PasswordEncoder passwordEncoder;
@@ -78,11 +84,32 @@ public class StaffServiceImpl implements StaffService {
     }
 
     @Override
+    public StaffResponse getMyProfile(UUID userId) {
+        StaffProfile profile = staffProfileRepository.findByUserIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("StaffProfile", "userId", userId));
+        return toResponse(profile);
+    }
+
+    @Override
     @Transactional
     public StaffResponse updateStatus(UUID staffId, StaffStatus status) {
         log.info("Updating staff {} status to {}", staffId, status);
         StaffProfile profile = findById(staffId);
         profile.setStatus(status);
+        return toResponse(staffProfileRepository.save(profile));
+    }
+
+    @Override
+    @Transactional
+    public StaffResponse updateShift(UUID staffId, UpdateShiftRequest request) {
+        log.info("Updating shift for staff {} to {}–{}", staffId, request.getShiftStart(), request.getShiftEnd());
+        StaffProfile profile = findById(staffId);
+        if (request.getShiftStart() != null && request.getShiftEnd() != null
+                && !request.getShiftStart().isBefore(request.getShiftEnd())) {
+            throw new BusinessException("Shift start must be before shift end");
+        }
+        profile.setShiftStart(request.getShiftStart());
+        profile.setShiftEnd(request.getShiftEnd());
         return toResponse(staffProfileRepository.save(profile));
     }
 
@@ -131,6 +158,40 @@ public class StaffServiceImpl implements StaffService {
                 .stream().map(this::toAttendanceResponse).toList();
     }
 
+    @Override
+    @Transactional
+    public LeaveResponse addLeave(UUID staffId, LeaveRequest request) {
+        log.info("Adding leave for staff {}: {} to {}", staffId, request.getStartDate(), request.getEndDate());
+        StaffProfile profile = findById(staffId);
+        if (request.getEndDate().isBefore(request.getStartDate())) {
+            throw new BusinessException("Leave end date cannot be before the start date");
+        }
+        StaffLeave leave = StaffLeave.builder()
+                .staff(profile)
+                .startDate(request.getStartDate())
+                .endDate(request.getEndDate())
+                .reason(request.getReason())
+                .build();
+        return toLeaveResponse(leaveRepository.save(leave));
+    }
+
+    @Override
+    public List<LeaveResponse> getLeaves(UUID staffId) {
+        return leaveRepository.findByStaffIdAndIsDeletedFalseOrderByStartDateDesc(staffId)
+                .stream().map(this::toLeaveResponse).toList();
+    }
+
+    @Override
+    @Transactional
+    public void cancelLeave(UUID leaveId) {
+        log.info("Cancelling leave: {}", leaveId);
+        StaffLeave leave = leaveRepository.findById(leaveId)
+                .filter(l -> !l.isDeleted())
+                .orElseThrow(() -> new ResourceNotFoundException("StaffLeave", "id", leaveId));
+        leave.setDeleted(true);
+        leaveRepository.save(leave);
+    }
+
     private StaffProfile findById(UUID id) {
         return staffProfileRepository.findById(id)
                 .filter(s -> !s.isDeleted())
@@ -149,8 +210,20 @@ public class StaffServiceImpl implements StaffService {
                 .status(p.getStatus().name())
                 .outletId(p.getOutlet().getId())
                 .outletName(p.getOutlet().getName())
+                .shiftStart(p.getShiftStart())
+                .shiftEnd(p.getShiftEnd())
                 .totalPresentDays(attendanceRepository.countPresentDays(p.getId()))
                 .createdAt(p.getCreatedAt())
+                .build();
+    }
+
+    private LeaveResponse toLeaveResponse(StaffLeave l) {
+        return LeaveResponse.builder()
+                .id(l.getId())
+                .staffId(l.getStaff().getId())
+                .startDate(l.getStartDate())
+                .endDate(l.getEndDate())
+                .reason(l.getReason())
                 .build();
     }
 

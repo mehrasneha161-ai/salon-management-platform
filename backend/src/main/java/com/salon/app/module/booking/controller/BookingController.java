@@ -2,6 +2,7 @@ package com.salon.app.module.booking.controller;
 
 import com.salon.app.module.booking.dto.request.ApproveBookingRequest;
 import com.salon.app.module.booking.dto.request.CreateBookingRequest;
+import com.salon.app.module.booking.dto.request.RescheduleBookingRequest;
 import com.salon.app.module.booking.dto.response.BookingResponse;
 import com.salon.app.module.booking.service.BookingService;
 import com.salon.app.module.booking.service.SlotAvailabilityService;
@@ -96,6 +97,27 @@ public class BookingController {
             @PathVariable UUID id, @AuthenticationPrincipal UserDetails userDetails) {
         UUID customerId = resolveUserId(userDetails);
         return ResponseEntity.ok(ApiResponse.success("Booking cancelled", bookingService.cancelBooking(id, customerId)));
+    }
+
+    @PutMapping("/bookings/{id}/reschedule")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<BookingResponse>> rescheduleBooking(
+            @PathVariable UUID id,
+            @Valid @RequestBody RescheduleBookingRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        UUID customerId = resolveUserId(userDetails);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Booking rescheduled. Slot locked for 10 minutes.",
+                bookingService.rescheduleBooking(id, customerId, request)));
+    }
+
+    @GetMapping("/bookings/assigned")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getAssignedBookings(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.getAssignedBookings(resolveUserId(userDetails), date)));
     }
 
     @GetMapping("/slots/available")

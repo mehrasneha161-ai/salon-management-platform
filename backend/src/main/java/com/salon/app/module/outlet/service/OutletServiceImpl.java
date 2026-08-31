@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,6 +50,8 @@ public class OutletServiceImpl implements OutletService {
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .isActive(request.isActive())
+                .openingTime(request.getOpeningTime() != null ? request.getOpeningTime() : LocalTime.of(9, 0))
+                .closingTime(request.getClosingTime() != null ? request.getClosingTime() : LocalTime.of(20, 0))
                 .build();
         return toResponse(outletRepository.save(outlet));
     }
@@ -65,6 +68,8 @@ public class OutletServiceImpl implements OutletService {
         outlet.setLatitude(request.getLatitude());
         outlet.setLongitude(request.getLongitude());
         outlet.setActive(request.isActive());
+        if (request.getOpeningTime() != null) outlet.setOpeningTime(request.getOpeningTime());
+        if (request.getClosingTime() != null) outlet.setClosingTime(request.getClosingTime());
         return toResponse(outletRepository.save(outlet));
     }
 
@@ -93,6 +98,8 @@ public class OutletServiceImpl implements OutletService {
                 .latitude(outlet.getLatitude())
                 .longitude(outlet.getLongitude())
                 .isActive(outlet.isActive())
+                .openingTime(outlet.getOpeningTime())
+                .closingTime(outlet.getClosingTime())
                 .createdAt(outlet.getCreatedAt())
                 .build();
     }

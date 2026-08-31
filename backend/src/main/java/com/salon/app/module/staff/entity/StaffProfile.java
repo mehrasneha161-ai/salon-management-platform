@@ -7,6 +7,8 @@ import com.salon.app.shared.enums.StaffStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalTime;
+
 @Entity
 @Table(name = "staff_profiles")
 @Getter
@@ -36,4 +38,11 @@ public class StaffProfile extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private StaffStatus status = StaffStatus.AVAILABLE;
+
+    // Optional per-staff shift. NULL means the staff follows the outlet hours.
+    @Column(name = "shift_start")
+    private LocalTime shiftStart;
+
+    @Column(name = "shift_end")
+    private LocalTime shiftEnd;
 }

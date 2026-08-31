@@ -38,6 +38,7 @@ public class SecurityConfig {
             "/api/v1/auth/**",
             "/api/v1/outlets",
             "/api/v1/services",
+            "/api/v1/service-categories",
             "/api/v1/packages",
             "/api/v1/gallery",
             "/api/v1/slots/available",

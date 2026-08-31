@@ -1,22 +1,50 @@
-import { Typography, Card, Alert } from 'antd'
+import { Typography, Card, Table, Spin, Row, Col } from 'antd'
+import {
+  useGetOutletPerformanceQuery,
+  useGetPopularServicesQuery,
+} from '../../features/analytics/analyticsApi'
+import { OutletRevenue, PopularService } from '../../types'
+import { formatCurrency } from '../../utils/formatters'
 
-const { Title, Text } = Typography
+const { Title } = Typography
 
 export default function AdminAnalyticsPage() {
+  const { data: revData, isLoading: loadingRev } = useGetOutletPerformanceQuery()
+  const { data: popData, isLoading: loadingPop } = useGetPopularServicesQuery()
+
+  const revenue = revData?.data ?? []
+  const popular = popData?.data ?? []
+
+  const revColumns = [
+    { title: 'Outlet', dataIndex: 'outletName', key: 'outletName' },
+    { title: 'Bookings', dataIndex: 'totalBookings', key: 'totalBookings' },
+    { title: 'Revenue', dataIndex: 'totalRevenue', key: 'totalRevenue', render: (v: number) => formatCurrency(v) },
+  ]
+  const popColumns = [
+    { title: 'Service', dataIndex: 'serviceName', key: 'serviceName' },
+    { title: 'Category', dataIndex: 'categoryName', key: 'categoryName' },
+    { title: 'Bookings', dataIndex: 'bookingCount', key: 'bookingCount' },
+  ]
+
   return (
     <div>
-      <div className="mb-6">
-        <Title level={3}>Analytics</Title>
-        <Text type="secondary">Outlet revenue and popular services.</Text>
-      </div>
-      <Card>
-        <Alert
-          type="info"
-          showIcon
-          message="Business analytics"
-          description="Revenue-by-outlet and popular-services charts (backed by the analytics API) will render here. Scaffolded so the app builds and runs end-to-end."
-        />
-      </Card>
+      <Title level={3}>Analytics</Title>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={12}>
+          <Card title="Revenue by outlet (completed bookings)">
+            {loadingRev ? <Spin /> : (
+              <Table<OutletRevenue> dataSource={revenue} columns={revColumns} rowKey="outletId" pagination={false} size="small" />
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="Popular services">
+            {loadingPop ? <Spin /> : (
+              <Table<PopularService> dataSource={popular} columns={popColumns} rowKey="serviceId" pagination={false} size="small" />
+            )}
+          </Card>
+        </Col>
+      </Row>
     </div>
   )
 }

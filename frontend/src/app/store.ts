@@ -8,6 +8,10 @@ import { staffApi } from '../features/staff/staffApi'
 import { galleryApi } from '../features/gallery/galleryApi'
 import { analyticsApi } from '../features/analytics/analyticsApi'
 import { notificationApi } from '../features/notification/notificationApi'
+import { paymentApi } from '../features/payment/paymentApi'
+import { reviewApi } from '../features/review/reviewApi'
+import { favouriteApi } from '../features/favourite/favouriteApi'
+import { setupAxiosInterceptors } from '../services/axiosInstance'
 
 export const store = configureStore({
   reducer: {
@@ -20,6 +24,9 @@ export const store = configureStore({
     [galleryApi.reducerPath]: galleryApi.reducer,
     [analyticsApi.reducerPath]: analyticsApi.reducer,
     [notificationApi.reducerPath]: notificationApi.reducer,
+    [paymentApi.reducerPath]: paymentApi.reducer,
+    [reviewApi.reducerPath]: reviewApi.reducer,
+    [favouriteApi.reducerPath]: favouriteApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -30,9 +37,14 @@ export const store = configureStore({
       staffApi.middleware,
       galleryApi.middleware,
       analyticsApi.middleware,
-      notificationApi.middleware
+      notificationApi.middleware,
+      paymentApi.middleware,
+      reviewApi.middleware,
+      favouriteApi.middleware
     ),
 })
+
+setupAxiosInterceptors(store)
 
 export type RootState = ReturnType<typeof store.getState>
 export type AppDispatch = typeof store.dispatch

@@ -8,6 +8,10 @@ export const staffApi = createApi({
   baseQuery: axiosBaseQuery(),
   tagTypes: ['Staff'],
   endpoints: (builder) => ({
+    getMyStaffProfile: builder.query<ApiResponse<StaffMember>, void>({
+      query: () => ({ url: `${API_ROUTES.STAFF}/me`, method: 'GET' }),
+      providesTags: ['Staff'],
+    }),
     getStaff: builder.query<ApiResponse<StaffMember[]>, { outletId?: string; status?: string }>({
       query: ({ outletId, status } = {}) => {
         const params = new URLSearchParams()
@@ -46,6 +50,7 @@ export const staffApi = createApi({
 })
 
 export const {
+  useGetMyStaffProfileQuery,
   useGetStaffQuery,
   useRegisterStaffMutation,
   useUpdateStaffStatusMutation,

@@ -2,7 +2,7 @@ import { Row, Col, Card, Statistic, Typography, Button } from 'antd'
 import { CalendarOutlined, HistoryOutlined, PictureOutlined, ShopOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { RootState } from '../../app/store'
+import type { RootState } from '../../app/store'
 import { useGetMyBookingsQuery } from '../../features/booking/bookingApi'
 import { APP_ROUTES } from '../../constants'
 

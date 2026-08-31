@@ -42,7 +42,17 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     boolean existsByBookingRef(String bookingRef);
 
+    @Query("SELECT b FROM Booking b WHERE b.staff.id = :staffId AND b.isDeleted = false " +
+           "AND (:date IS NULL OR b.scheduledDate = :date) " +
+           "ORDER BY b.scheduledDate DESC, b.scheduledTime ASC")
+    List<Booking> findAssignedBookings(UUID staffId, LocalDate date);
+
     @Query("SELECT b FROM Booking b WHERE b.status = 'SLOT_LOCKED' " +
            "AND b.updatedAt < :cutoff")
     List<Booking> findExpiredLockedBookings(java.time.Instant cutoff);
+
+    @Query("SELECT b FROM Booking b JOIN FETCH b.customer JOIN FETCH b.outlet " +
+           "WHERE b.status = 'CONFIRMED' AND b.scheduledDate = :date " +
+           "AND b.reminderSent = false AND b.isDeleted = false")
+    List<Booking> findConfirmedForReminder(LocalDate date);
 }

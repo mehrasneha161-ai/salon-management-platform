@@ -16,6 +16,15 @@ export interface Outlet {
   latitude: number
   longitude: number
   isActive: boolean
+  openingTime?: string
+  closingTime?: string
+}
+
+export interface ServiceCategory {
+  id: string
+  name: string
+  iconUrl?: string
+  sortOrder: number
 }
 
 export interface SalonService {

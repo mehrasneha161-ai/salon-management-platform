@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalTime;
 
 @Entity
 @Table(name = "outlets")
@@ -35,4 +36,10 @@ public class Outlet extends BaseEntity {
 
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
+
+    @Column(name = "opening_time", nullable = false)
+    private LocalTime openingTime = LocalTime.of(9, 0);
+
+    @Column(name = "closing_time", nullable = false)
+    private LocalTime closingTime = LocalTime.of(20, 0);
 }

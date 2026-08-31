@@ -4,6 +4,7 @@ import com.salon.app.module.outlet.entity.Outlet;
 import com.salon.app.module.outlet.repository.OutletRepository;
 import com.salon.app.module.service.dto.request.PackageRequest;
 import com.salon.app.module.service.dto.request.ServiceRequest;
+import com.salon.app.module.service.dto.response.CategoryResponse;
 import com.salon.app.module.service.dto.response.PackageResponse;
 import com.salon.app.module.service.dto.response.ServiceResponse;
 import com.salon.app.module.service.entity.SalonService;
@@ -32,6 +33,19 @@ public class SalonServiceManagerImpl implements SalonServiceManager {
     private final ServiceCategoryRepository categoryRepository;
     private final ServicePackageRepository packageRepository;
     private final OutletRepository outletRepository;
+
+    @Override
+    public List<CategoryResponse> getCategories() {
+        return categoryRepository.findByIsActiveTrueAndIsDeletedFalseOrderBySortOrderAsc()
+                .stream()
+                .map(c -> CategoryResponse.builder()
+                        .id(c.getId())
+                        .name(c.getName())
+                        .iconUrl(c.getIconUrl())
+                        .sortOrder(c.getSortOrder())
+                        .build())
+                .toList();
+    }
 
     @Override
     public List<ServiceResponse> getServices(UUID categoryId, UUID outletId) {
