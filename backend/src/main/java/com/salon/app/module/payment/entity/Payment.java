@@ -51,6 +51,13 @@ public class Payment {
     @Column(name = "paid_at")
     private Instant paidAt;
 
+    @Column(name = "reconciliation_required", nullable = false)
+    @Builder.Default
+    private boolean reconciliationRequired = false;
+
+    @Column(name = "reconciliation_reason", length = 500)
+    private String reconciliationReason;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

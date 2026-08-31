@@ -1,14 +1,14 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { axiosBaseQuery } from '../../utils/axiosBaseQuery'
 import { API_ROUTES } from '../../constants'
-import { ApiResponse, PagedResponse, Booking } from '../../types'
+import { ApiResponse, PagedResponse, Booking, CreateBookingRequest } from '../../types'
 
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
   baseQuery: axiosBaseQuery(),
   tagTypes: ['Booking'],
   endpoints: (builder) => ({
-    createBooking: builder.mutation<ApiResponse<Booking>, object>({
+    createBooking: builder.mutation<ApiResponse<Booking>, CreateBookingRequest>({
       query: (body) => ({ url: API_ROUTES.BOOKINGS, method: 'POST', data: body }),
       invalidatesTags: ['Booking'],
     }),

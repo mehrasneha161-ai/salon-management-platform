@@ -18,6 +18,7 @@ export const API_ROUTES = {
   PAYMENTS: `${API_BASE_URL}/payments`,
   REVIEWS: `${API_BASE_URL}/reviews`,
   FAVOURITES: `${API_BASE_URL}/favourites`,
+  COUPONS: `${API_BASE_URL}/coupons`,
   ANALYTICS: {
     OUTLET_PERFORMANCE: `${API_BASE_URL}/analytics/outlet-performance`,
     POPULAR_SERVICES: `${API_BASE_URL}/analytics/popular-services`,
@@ -48,6 +49,7 @@ export const APP_ROUTES = {
     BOOKINGS: '/admin/bookings',
     STAFF: '/admin/staff',
     SERVICES: '/admin/services',
+    COUPONS: '/admin/coupons',
     OUTLETS: '/admin/outlets',
     GALLERY: '/admin/gallery',
     ANALYTICS: '/admin/analytics',

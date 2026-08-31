@@ -2,10 +2,13 @@ package com.salon.app.module.booking.repository;
 
 import com.salon.app.module.booking.entity.Booking;
 import com.salon.app.shared.enums.BookingStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -42,14 +45,19 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     boolean existsByBookingRef(String bookingRef);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.id = :id AND b.isDeleted = false")
+    Optional<Booking> findByIdForUpdate(@Param("id") UUID id);
+
     @Query("SELECT b FROM Booking b WHERE b.staff.id = :staffId AND b.isDeleted = false " +
            "AND (:date IS NULL OR b.scheduledDate = :date) " +
            "ORDER BY b.scheduledDate DESC, b.scheduledTime ASC")
     List<Booking> findAssignedBookings(UUID staffId, LocalDate date);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM Booking b WHERE b.status = 'SLOT_LOCKED' " +
-           "AND b.updatedAt < :cutoff")
-    List<Booking> findExpiredLockedBookings(java.time.Instant cutoff);
+           "AND b.slotLockedAt < :cutoff AND b.isDeleted = false")
+    List<Booking> findExpiredLockedBookings(@Param("cutoff") java.time.Instant cutoff);
 
     @Query("SELECT b FROM Booking b JOIN FETCH b.customer JOIN FETCH b.outlet " +
            "WHERE b.status = 'CONFIRMED' AND b.scheduledDate = :date " +

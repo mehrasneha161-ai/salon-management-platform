@@ -79,9 +79,100 @@ export interface Booking {
   scheduledTime: string
   durationMinutes: number
   status: BookingStatus
+  subtotalAmount?: number
+  discountAmount?: number
   totalAmount: number
+  couponCode?: string
   notes?: string
   createdAt: string
+}
+
+export type CreateBookingRequest = {
+  outletId: string
+  staffId: string
+  serviceId?: string
+  packageId?: string
+  scheduledDate: string
+  scheduledTime: string
+  notes?: string
+  sessionId?: string
+} & (
+  | {
+      couponCode: string
+      expectedCouponId: string
+      expectedSubtotalAmount: number
+      expectedDiscountAmount: number
+      expectedTotalAmount: number
+    }
+  | {
+      couponCode?: never
+      expectedCouponId?: never
+      expectedSubtotalAmount?: never
+      expectedDiscountAmount?: never
+      expectedTotalAmount?: never
+    }
+)
+
+export type CouponDiscountType = 'PERCENTAGE' | 'FIXED'
+
+export interface Coupon {
+  id: string
+  code: string
+  name: string
+  description?: string | null
+  discountType: CouponDiscountType
+  discountValue: number
+  minimumSpend: number
+  maximumDiscount?: number | null
+  validFrom: string
+  validUntil: string
+  usageLimit?: number | null
+  perCustomerLimit?: number | null
+  reservedCount: number
+  redeemedCount: number
+  outletId?: string | null
+  serviceId?: string | null
+  packageId?: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CouponValidationResponse {
+  couponId: string
+  code: string
+  discountType: CouponDiscountType
+  discountValue: number
+  maximumDiscount?: number | null
+  subtotalAmount: number
+  discountAmount: number
+  totalAmount: number
+  validUntil: string
+}
+
+export interface CouponRequest {
+  code: string
+  name: string
+  description?: string
+  discountType: CouponDiscountType
+  discountValue: number
+  minimumSpend?: number
+  maximumDiscount?: number
+  validFrom: string
+  validUntil: string
+  usageLimit?: number
+  perCustomerLimit?: number
+  outletId?: string
+  serviceId?: string
+  packageId?: string
+  isActive: boolean
+}
+
+export interface CouponValidationRequest {
+  code: string
+  outletId: string
+  serviceId?: string
+  packageId?: string
 }
 
 export type BookingStatus =

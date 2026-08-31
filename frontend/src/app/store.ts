@@ -11,6 +11,7 @@ import { notificationApi } from '../features/notification/notificationApi'
 import { paymentApi } from '../features/payment/paymentApi'
 import { reviewApi } from '../features/review/reviewApi'
 import { favouriteApi } from '../features/favourite/favouriteApi'
+import { couponApi } from '../features/coupon/couponApi'
 import { setupAxiosInterceptors } from '../services/axiosInstance'
 
 export const store = configureStore({
@@ -27,6 +28,7 @@ export const store = configureStore({
     [paymentApi.reducerPath]: paymentApi.reducer,
     [reviewApi.reducerPath]: reviewApi.reducer,
     [favouriteApi.reducerPath]: favouriteApi.reducer,
+    [couponApi.reducerPath]: couponApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -40,7 +42,8 @@ export const store = configureStore({
       notificationApi.middleware,
       paymentApi.middleware,
       reviewApi.middleware,
-      favouriteApi.middleware
+      favouriteApi.middleware,
+      couponApi.middleware
     ),
 })
 

@@ -22,4 +22,6 @@ public class PaymentResponse {
     // Public gateway key id for the client checkout SDK (safe to expose).
     private String keyId;
     private Instant paidAt;
+    private boolean reconciliationRequired;
+    private String reconciliationReason;
 }

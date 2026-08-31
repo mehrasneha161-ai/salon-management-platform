@@ -1,10 +1,10 @@
-import { Layout, Menu, Avatar, Dropdown, Badge } from 'antd'
+import { Layout, Menu, Avatar, Dropdown } from 'antd'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   DashboardOutlined, CalendarOutlined, TeamOutlined, ScissorOutlined,
   ShopOutlined, PictureOutlined, BarChartOutlined, BellOutlined,
-  UserOutlined, LogoutOutlined
+  UserOutlined, LogoutOutlined, TagsOutlined
 } from '@ant-design/icons'
 import { logout } from '../../features/auth/authSlice'
 import type { RootState } from '../../app/store'
@@ -23,6 +23,7 @@ const AdminLayout: React.FC = () => {
     { key: APP_ROUTES.ADMIN.BOOKINGS, icon: <CalendarOutlined />, label: 'Bookings' },
     { key: APP_ROUTES.ADMIN.STAFF, icon: <TeamOutlined />, label: 'Staff' },
     { key: APP_ROUTES.ADMIN.SERVICES, icon: <ScissorOutlined />, label: 'Services' },
+    { key: APP_ROUTES.ADMIN.COUPONS, icon: <TagsOutlined />, label: 'Coupons' },
     { key: APP_ROUTES.ADMIN.OUTLETS, icon: <ShopOutlined />, label: 'Outlets' },
     { key: APP_ROUTES.ADMIN.GALLERY, icon: <PictureOutlined />, label: 'Gallery' },
     { key: APP_ROUTES.ADMIN.ANALYTICS, icon: <BarChartOutlined />, label: 'Analytics' },

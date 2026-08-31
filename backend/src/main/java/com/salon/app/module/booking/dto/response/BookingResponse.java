@@ -26,7 +26,10 @@ public class BookingResponse {
     private LocalTime scheduledTime;
     private int durationMinutes;
     private String status;
+    private BigDecimal subtotalAmount;
+    private BigDecimal discountAmount;
     private BigDecimal totalAmount;
+    private String couponCode;
     private String notes;
     private Instant createdAt;
 }

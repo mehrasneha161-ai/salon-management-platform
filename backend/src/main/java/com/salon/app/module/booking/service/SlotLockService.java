@@ -4,11 +4,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -22,6 +24,11 @@ public class SlotLockService {
     private long slotLockTtlSeconds;
 
     private static final String LOCK_KEY_PREFIX = "slot_lock:";
+    private static final DefaultRedisScript<Long> RELEASE_IF_OWNER_SCRIPT =
+            new DefaultRedisScript<>(
+                    "if redis.call('get', KEYS[1]) == ARGV[1] "
+                            + "then return redis.call('del', KEYS[1]) else return 0 end",
+                    Long.class);
 
     public boolean tryLock(UUID outletId, LocalDate date, LocalTime time, UUID staffId, String sessionId) {
         String key = buildKey(outletId, date, time, staffId);
@@ -33,10 +40,15 @@ public class SlotLockService {
         return result;
     }
 
-    public void releaseLock(UUID outletId, LocalDate date, LocalTime time, UUID staffId) {
+    public boolean releaseLock(
+            UUID outletId, LocalDate date, LocalTime time, UUID staffId, String sessionId) {
         String key = buildKey(outletId, date, time, staffId);
-        log.info("Releasing slot lock: {}", key);
-        redisTemplate.delete(key);
+        Long released = redisTemplate.execute(
+                RELEASE_IF_OWNER_SCRIPT, List.of(key), sessionId);
+        boolean result = Long.valueOf(1L).equals(released);
+        log.info("Owner-checked slot lock release {} for key: {}",
+                result ? "succeeded" : "skipped", key);
+        return result;
     }
 
     public void extendLock(UUID outletId, LocalDate date, LocalTime time, UUID staffId) {
