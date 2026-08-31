@@ -13,6 +13,9 @@ verify everything on your machine**.
 | Bug fixes (attendance + booking ref) | `fix/staff-attendance-and-booking-ref` | #1 |
 | Full dockerisation | `chore/dockerise-full-stack` | #2 |
 
+> The **attendance fix (A1)** is included on **both** branches, so the
+> dockerisation branch works end-to-end on its own (see §4b to verify).
+
 To test the complete result, use the dockerisation branch (it is based on the
 default branch; merge/checkout as needed):
 

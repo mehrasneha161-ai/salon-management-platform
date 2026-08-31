@@ -26,6 +26,9 @@ across two pieces of work:
   dependency + a private `resolveUserId(UserDetails)` helper, and used it in
   both check-in and check-out.
 - **Files:** `backend/.../staff/controller/StaffController.java`
+- **Note:** this same fix is also applied on the `chore/dockerise-full-stack`
+  branch, so that branch is self-contained (attendance works after a plain
+  `docker compose up`, even before PR #1 is merged).
 
 ### A2. Duplicate `booking_ref` (unique-constraint violation)
 - **Symptom:** after an app restart (or with more than one instance), creating a
