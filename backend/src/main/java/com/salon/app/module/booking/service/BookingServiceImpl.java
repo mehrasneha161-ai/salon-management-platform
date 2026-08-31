@@ -4,6 +4,7 @@ import com.salon.app.module.auth.entity.User;
 import com.salon.app.module.auth.repository.UserRepository;
 import com.salon.app.module.booking.dto.request.ApproveBookingRequest;
 import com.salon.app.module.booking.dto.request.CreateBookingRequest;
+import com.salon.app.module.booking.dto.request.RescheduleBookingRequest;
 import com.salon.app.module.booking.dto.response.BookingResponse;
 import com.salon.app.module.booking.entity.Booking;
 import com.salon.app.module.booking.event.BookingCancelledEvent;
@@ -181,6 +182,68 @@ public class BookingServiceImpl implements BookingService {
         }
         slotAvailabilityService.broadcastSlotUpdate(booking.getOutlet().getId(), booking.getScheduledDate());
         return toResponse(bookingRepository.save(booking));
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse rescheduleBooking(UUID bookingId, UUID customerId, RescheduleBookingRequest request) {
+        log.info("Rescheduling booking: {} by customer: {}", bookingId, customerId);
+        Booking booking = findById(bookingId);
+        if (!booking.getCustomer().getId().equals(customerId)) {
+            throw new BusinessException("You can only reschedule your own bookings");
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED
+                || booking.getStatus() == BookingStatus.CANCELLED
+                || booking.getStatus() == BookingStatus.REJECTED) {
+            throw new BusinessException("This booking can no longer be rescheduled");
+        }
+
+        // Target stylist: keep the current one unless a new one is requested.
+        StaffProfile targetStaff = booking.getStaff();
+        if (request.getStaffId() != null) {
+            targetStaff = staffProfileRepository.findById(request.getStaffId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Staff", "id", request.getStaffId()));
+        }
+        if (targetStaff == null) {
+            throw new BusinessException("A stylist is required to reschedule");
+        }
+
+        UUID outletId = booking.getOutlet().getId();
+        UUID currentStaffId = booking.getStaff() != null ? booking.getStaff().getId() : null;
+        boolean sameSlot = targetStaff.getId().equals(currentStaffId)
+                && request.getScheduledDate().equals(booking.getScheduledDate())
+                && request.getScheduledTime().equals(booking.getScheduledTime());
+        if (sameSlot) {
+            throw new BusinessException("The booking is already at this date, time and stylist");
+        }
+
+        // Lock the NEW slot first; only then give up the old one.
+        String sessionId = request.getSessionId() != null ? request.getSessionId() : UUID.randomUUID().toString();
+        boolean locked = slotLockService.tryLock(outletId, request.getScheduledDate(),
+                request.getScheduledTime(), targetStaff.getId(), sessionId);
+        if (!locked) {
+            throw new SlotAlreadyLockedException("That slot is currently being booked by another customer. Please pick a different time.");
+        }
+
+        LocalDate oldDate = booking.getScheduledDate();
+        if (booking.getStaff() != null) {
+            slotLockService.releaseLock(outletId, booking.getScheduledDate(),
+                    booking.getScheduledTime(), booking.getStaff().getId());
+        }
+
+        // Apply the change and re-enter the pipeline for admin confirmation.
+        booking.setStaff(targetStaff);
+        booking.setScheduledDate(request.getScheduledDate());
+        booking.setScheduledTime(request.getScheduledTime());
+        booking.setStatus(BookingStatus.SLOT_LOCKED);
+        bookingRepository.save(booking);
+
+        // Refresh both the old and the new date's slot boards.
+        slotAvailabilityService.broadcastSlotUpdate(outletId, oldDate);
+        slotAvailabilityService.broadcastSlotUpdate(outletId, request.getScheduledDate());
+        log.info("Booking {} rescheduled to {} {}", booking.getBookingRef(),
+                request.getScheduledDate(), request.getScheduledTime());
+        return toResponse(booking);
     }
 
     private Booking findById(UUID id) {

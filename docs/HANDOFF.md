@@ -48,6 +48,16 @@ git checkout chore/dockerise-full-stack
 3. Generate `BK-<yyyyMMdd>-<random 6 chars A–Z0–9>`, check `existsByBookingRef`,
    retry up to 5 times, else throw `BusinessException`.
 
+### Feature C1 — Reschedule a booking
+1. Added `RescheduleBookingRequest` DTO (`scheduledDate` `@Future`,
+   `scheduledTime`, optional `staffId`, `sessionId`).
+2. Added `rescheduleBooking(...)` to `BookingService`/`BookingServiceImpl`:
+   ownership + status guard → lock the **new** slot → release the **old** slot →
+   update date/time/stylist → status `SLOT_LOCKED` → broadcast both dates.
+3. Added `PUT /api/v1/bookings/{id}/reschedule` in `BookingController`.
+4. Frontend: `rescheduleBooking` RTK Query mutation + a Reschedule button and
+   modal (DatePicker + TimePicker) in *My Bookings*.
+
 ### Dockerisation
 1. **Frontend image:** Node build stage runs `npx vite build` → `dist`; nginx
    stage serves `dist` and uses `nginx.conf`.
@@ -182,6 +192,24 @@ curl -i -X POST $BASE/staff/attendance/check-out -H "Authorization: Bearer $STAF
 **Expected:** step 5 and 6 return `200` (they returned `500` before the fix).
 
 ---
+
+### 4c. Reschedule a booking (Feature C1)
+**UI:** log in as a customer → **My Bookings** → click **Reschedule** on a
+PENDING/SLOT_LOCKED/CONFIRMED row → pick a new (future) date + time → submit.
+The row moves to the new date/time and status returns to `SLOT_LOCKED`
+(awaiting admin confirmation).
+
+**API:**
+```bash
+BASE=http://localhost:8080/api/v1
+# CUST = a customer accessToken; BOOKING_ID = an existing booking id of that customer
+curl -i -X PUT $BASE/bookings/$BOOKING_ID/reschedule \
+  -H "Authorization: Bearer $CUST" -H 'Content-Type: application/json' \
+  -d '{"scheduledDate":"2026-12-01","scheduledTime":"14:30"}'
+```
+Expected: `200` with the updated booking (new date/time, status `SLOT_LOCKED`).
+If the target slot is being booked by someone else → `409` `SLOT_ALREADY_LOCKED`.
+Rescheduling to the exact same slot → `400` with a clear message.
 
 ## 5. Local testing — Option B: run natively (for active development)
 

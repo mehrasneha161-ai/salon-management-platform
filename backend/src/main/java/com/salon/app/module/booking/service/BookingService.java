@@ -2,6 +2,7 @@ package com.salon.app.module.booking.service;
 
 import com.salon.app.module.booking.dto.request.ApproveBookingRequest;
 import com.salon.app.module.booking.dto.request.CreateBookingRequest;
+import com.salon.app.module.booking.dto.request.RescheduleBookingRequest;
 import com.salon.app.module.booking.dto.response.BookingResponse;
 import com.salon.app.shared.enums.BookingStatus;
 import com.salon.app.shared.response.PagedResponse;
@@ -18,4 +19,5 @@ public interface BookingService {
     BookingResponse rejectBooking(UUID bookingId, String reason);
     BookingResponse completeBooking(UUID bookingId);
     BookingResponse cancelBooking(UUID bookingId, UUID customerId);
+    BookingResponse rescheduleBooking(UUID bookingId, UUID customerId, RescheduleBookingRequest request);
 }

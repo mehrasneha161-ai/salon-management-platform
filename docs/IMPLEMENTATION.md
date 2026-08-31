@@ -120,6 +120,37 @@ entire stack.** Several things blocked a clean bring-up; each was fixed.
 
 ---
 
+## Part C — Features
+
+### C1. Reschedule a booking (customer)
+- **What:** customers can now move an existing booking to a new date/time (and
+  optionally a different stylist) instead of only cancelling.
+- **Endpoint:** `PUT /api/v1/bookings/{id}/reschedule` (role `CUSTOMER`), body
+  `{ scheduledDate, scheduledTime, staffId? }`.
+- **Behaviour (matches the create/cancel patterns):**
+  - Ownership + status guard: only the owning customer, and not for
+    `COMPLETED / CANCELLED / REJECTED` bookings.
+  - **Locks the NEW slot first** (Redis `tryLock`); if it's taken →
+    `409 SlotAlreadyLocked` and the old slot is left untouched.
+  - On success, **releases the OLD slot lock**, updates date/time/stylist, and
+    resets status to `SLOT_LOCKED` so it re-enters the admin-confirmation
+    pipeline. Broadcasts slot updates for both the old and new dates.
+  - Rescheduling to the exact same slot is rejected with a clear message.
+- **Frontend:** a **Reschedule** button next to Cancel in *My Bookings*, opening
+  a modal (DatePicker + 30-min TimePicker; past/today disabled to satisfy the
+  `@Future` rule).
+- **Files:** `booking/dto/request/RescheduleBookingRequest.java` (new),
+  `booking/service/BookingService.java`, `booking/service/BookingServiceImpl.java`,
+  `booking/controller/BookingController.java`,
+  `frontend/src/features/booking/bookingApi.ts`,
+  `frontend/src/pages/customer/BookingHistoryPage.tsx`.
+- **Known limitation:** like `createBooking`, conflict prevention relies on the
+  Redis slot lock (not a DB conflict check), so a slot whose lock has expired but
+  which holds a confirmed booking is not re-validated — consistent with the
+  existing create flow.
+
+---
+
 ## Full list of changed / added files
 
 | Area | File | Change |
@@ -138,6 +169,11 @@ entire stack.** Several things blocked a clean bring-up; each was fixed.
 | Compose | `docker-compose.yml` | healthchecks, minio-init, deps, redis keys |
 | Repo | `.gitignore` | **new** |
 | Docs | `README.md` | run steps + admin login |
+| Feature C1 | `booking/dto/request/RescheduleBookingRequest.java` | **new** DTO |
+| Feature C1 | `booking/service/BookingService(Impl).java` | `rescheduleBooking(...)` |
+| Feature C1 | `booking/controller/BookingController.java` | `PUT /bookings/{id}/reschedule` |
+| Feature C1 | `frontend/.../booking/bookingApi.ts` | `rescheduleBooking` mutation |
+| Feature C1 | `frontend/.../customer/BookingHistoryPage.tsx` | Reschedule button + modal |
 
 ---
 

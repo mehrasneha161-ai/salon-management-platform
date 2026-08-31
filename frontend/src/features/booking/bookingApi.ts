@@ -53,6 +53,14 @@ export const bookingApi = createApi({
       query: (id) => ({ url: `${API_ROUTES.BOOKINGS}/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Booking'],
     }),
+    rescheduleBooking: builder.mutation<ApiResponse<Booking>, { id: string; scheduledDate: string; scheduledTime: string; staffId?: string }>({
+      query: ({ id, ...body }) => ({
+        url: `${API_ROUTES.BOOKINGS}/${id}/reschedule`,
+        method: 'PUT',
+        data: body,
+      }),
+      invalidatesTags: ['Booking'],
+    }),
     getAvailableSlots: builder.query<ApiResponse<string[]>, { outletId: string; staffId: string; date: string; durationMinutes?: number }>({
       query: ({ outletId, staffId, date, durationMinutes = 30 }) => ({
         url: `${API_ROUTES.SLOTS}?outletId=${outletId}&staffId=${staffId}&date=${date}&durationMinutes=${durationMinutes}`,
@@ -70,5 +78,6 @@ export const {
   useRejectBookingMutation,
   useCompleteBookingMutation,
   useCancelBookingMutation,
+  useRescheduleBookingMutation,
   useGetAvailableSlotsQuery,
 } = bookingApi
