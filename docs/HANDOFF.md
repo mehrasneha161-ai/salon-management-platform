@@ -77,6 +77,15 @@ git checkout chore/dockerise-full-stack
 2. Added `SlotAvailabilityService.hasConflict(...)`; `createBooking` and
    `rescheduleBooking` call it and reject overlaps (409) server-side.
 
+### Feature C4 — Auto reminders + email
+1. Migration `V3` adds `bookings.reminder_sent`.
+2. `BookingReminderScheduler` (hourly, `@Scheduled`) publishes `BookingReminderEvent`
+   for CONFIRMED bookings scheduled tomorrow and flips `reminder_sent` (at-most-once).
+3. `BookingEventListener` now also handles the reminder event and, for BOTH
+   confirmation and reminder, sends email via the new `EmailService`
+   (`JavaMailSender`, async, best-effort). `approveBooking` pre-initialises
+   associations so async handlers don't hit lazy-loading errors.
+
 ### Dockerisation
 1. **Frontend image:** Node build stage runs `npx vite build` → `dist`; nginx
    stage serves `dist` and uses `nginx.conf`.

@@ -144,6 +144,12 @@ public class BookingServiceImpl implements BookingService {
         booking.setStaff(staff);
         booking.setStatus(BookingStatus.CONFIRMED);
         bookingRepository.save(booking);
+        // Initialise lazy associations in-transaction so the async notification
+        // handlers can read them safely after the entity is detached.
+        booking.getCustomer().getFullName();
+        booking.getCustomer().getEmail();
+        booking.getCustomer().getPhoneNumber();
+        booking.getOutlet().getName();
         eventPublisher.publishEvent(new BookingConfirmedEvent(this, booking));
         return toResponse(booking);
     }

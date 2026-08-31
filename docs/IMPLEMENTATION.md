@@ -195,6 +195,25 @@ entire stack.** Several things blocked a clean bring-up; each was fixed.
   `staff/dto/response/StaffResponse.java`, and the outlet request/response +
   `OutletServiceImpl`.
 
+### C4. Auto booking reminders + email notifications
+- **Problems fixed:** (a) `sendReminder` existed but nothing triggered it, so
+  reminders never went out; (b) `spring-boot-starter-mail` was a dependency but
+  no email was ever sent (WhatsApp only).
+- **Reminders:** new `BookingReminderScheduler` (hourly) finds **CONFIRMED**
+  bookings scheduled for **tomorrow** that haven't been reminded, publishes a new
+  `BookingReminderEvent`, and sets a `reminder_sent` flag (at-most-once). The
+  query uses `JOIN FETCH` so associations are safe to read in the async handler.
+  Follows the existing event-driven pattern (booking stays decoupled from
+  notifications).
+- **Email:** new `EmailService` (Spring `JavaMailSender`) sends **confirmation**
+  and **reminder** emails — asynchronous, best-effort (failures logged, customers
+  without an email skipped). Wired into `BookingEventListener` alongside WhatsApp
+  for both the confirmed and reminder events.
+- **Robustness:** `approveBooking` initialises the customer/outlet associations
+  in-transaction before publishing the confirmed event, so the async WhatsApp +
+  email handlers don't hit lazy-loading errors.
+- **Migration:** `V3__booking_reminder_flag.sql` (adds `bookings.reminder_sent`).
+
 ---
 
 ## Full list of changed / added files
