@@ -1,5 +1,6 @@
 package com.salon.app.module.staff.controller;
 
+import com.salon.app.module.auth.repository.UserRepository;
 import com.salon.app.module.staff.dto.request.RegisterStaffRequest;
 import com.salon.app.module.staff.dto.response.AttendanceResponse;
 import com.salon.app.module.staff.dto.response.StaffResponse;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class StaffController {
 
     private final StaffService staffService;
+    private final UserRepository userRepository;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
@@ -55,14 +57,13 @@ public class StaffController {
     @PostMapping("/attendance/check-in")
     @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<AttendanceResponse>> checkIn(@AuthenticationPrincipal UserDetails userDetails) {
-        // userId resolved from phone number via UserRepository in service
-        return ResponseEntity.ok(ApiResponse.success("Checked in", staffService.checkIn(UUID.fromString(userDetails.getUsername()))));
+        return ResponseEntity.ok(ApiResponse.success("Checked in", staffService.checkIn(resolveUserId(userDetails))));
     }
 
     @PostMapping("/attendance/check-out")
     @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<AttendanceResponse>> checkOut(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.success("Checked out", staffService.checkOut(UUID.fromString(userDetails.getUsername()))));
+        return ResponseEntity.ok(ApiResponse.success("Checked out", staffService.checkOut(resolveUserId(userDetails))));
     }
 
     @GetMapping("/{id}/attendance")
@@ -72,5 +73,10 @@ public class StaffController {
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month) {
         return ResponseEntity.ok(ApiResponse.success(staffService.getAttendance(id, year, month)));
+    }
+
+    private UUID resolveUserId(UserDetails userDetails) {
+        return userRepository.findByPhoneNumberAndIsDeletedFalse(userDetails.getUsername())
+                .orElseThrow().getId();
     }
 }

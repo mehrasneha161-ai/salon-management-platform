@@ -34,7 +34,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 @Service
@@ -51,7 +51,10 @@ public class BookingServiceImpl implements BookingService {
     private final SlotAvailabilityService slotAvailabilityService;
     private final ApplicationEventPublisher eventPublisher;
 
-    private static final AtomicInteger BOOKING_COUNTER = new AtomicInteger(1);
+    // Booking reference: BK-<yyyyMMdd>-<random 6-char> — restart & multi-instance safe.
+    private static final String REF_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final int REF_SUFFIX_LENGTH = 6;
+    private static final int REF_MAX_ATTEMPTS = 5;
 
     @Override
     @Transactional
@@ -190,8 +193,24 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private String generateBookingRef() {
-        return "BK-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) +
-               "-" + String.format("%04d", BOOKING_COUNTER.getAndIncrement());
+        String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        for (int attempt = 0; attempt < REF_MAX_ATTEMPTS; attempt++) {
+            String ref = "BK-" + datePart + "-" + randomRefSuffix();
+            if (!bookingRepository.existsByBookingRef(ref)) {
+                return ref;
+            }
+            log.warn("Booking ref collision on attempt {}: {}", attempt + 1, ref);
+        }
+        throw new BusinessException("Could not generate a unique booking reference. Please retry.");
+    }
+
+    private String randomRefSuffix() {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        StringBuilder sb = new StringBuilder(REF_SUFFIX_LENGTH);
+        for (int i = 0; i < REF_SUFFIX_LENGTH; i++) {
+            sb.append(REF_ALPHABET.charAt(random.nextInt(REF_ALPHABET.length())));
+        }
+        return sb.toString();
     }
 
     private BookingResponse toResponse(Booking b) {
