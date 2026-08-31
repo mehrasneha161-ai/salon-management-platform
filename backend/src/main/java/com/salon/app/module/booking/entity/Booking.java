@@ -1,16 +1,19 @@
 package com.salon.app.module.booking.entity;
 
 import com.salon.app.module.auth.entity.User;
+import com.salon.app.module.coupon.entity.Coupon;
 import com.salon.app.module.outlet.entity.Outlet;
 import com.salon.app.module.service.entity.SalonService;
 import com.salon.app.module.service.entity.ServicePackage;
 import com.salon.app.module.staff.entity.StaffProfile;
 import com.salon.app.shared.entity.BaseEntity;
 import com.salon.app.shared.enums.BookingStatus;
+import com.salon.app.shared.enums.CouponDiscountType;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
@@ -46,6 +49,9 @@ public class Booking extends BaseEntity {
     @JoinColumn(name = "package_id")
     private ServicePackage servicePackage;
 
+    @Column(name = "slot_locked_at", nullable = false, updatable = false)
+    private Instant slotLockedAt;
+
     @Column(name = "scheduled_date", nullable = false)
     private LocalDate scheduledDate;
 
@@ -59,8 +65,32 @@ public class Booking extends BaseEntity {
     @Column(nullable = false, length = 30)
     private BookingStatus status = BookingStatus.PENDING;
 
+    @Column(name = "subtotal_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal subtotalAmount;
+
+    @Column(name = "discount_amount", nullable = false, precision = 10, scale = 2)
+    @Builder.Default
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coupon_id")
+    private Coupon coupon;
+
+    @Column(name = "coupon_code", length = 50)
+    private String couponCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "coupon_discount_type", length = 20)
+    private CouponDiscountType couponDiscountType;
+
+    @Column(name = "coupon_discount_value", precision = 10, scale = 2)
+    private BigDecimal couponDiscountValue;
+
+    @Column(name = "coupon_maximum_discount", precision = 10, scale = 2)
+    private BigDecimal couponMaximumDiscount;
 
     @Column
     private String notes;

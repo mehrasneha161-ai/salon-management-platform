@@ -22,6 +22,7 @@ import AdminServicesPage from './pages/admin/AdminServicesPage'
 import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage'
 import AdminNotificationsPage from './pages/admin/AdminNotificationsPage'
 import AdminGalleryPage from './pages/admin/AdminGalleryPage'
+import AdminCouponsPage from './pages/admin/AdminCouponsPage'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 
 function App() {
@@ -73,6 +74,7 @@ function App() {
           <Route path={APP_ROUTES.ADMIN.BOOKINGS} element={<AdminBookingsPage />} />
           <Route path={APP_ROUTES.ADMIN.STAFF} element={<AdminStaffPage />} />
           <Route path={APP_ROUTES.ADMIN.SERVICES} element={<AdminServicesPage />} />
+          <Route path={APP_ROUTES.ADMIN.COUPONS} element={<AdminCouponsPage />} />
           <Route path={APP_ROUTES.ADMIN.OUTLETS} element={<AdminOutletsPage />} />
           <Route path={APP_ROUTES.ADMIN.ANALYTICS} element={<AdminAnalyticsPage />} />
           <Route path={APP_ROUTES.ADMIN.NOTIFICATIONS} element={<AdminNotificationsPage />} />

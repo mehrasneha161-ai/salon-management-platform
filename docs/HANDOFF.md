@@ -115,6 +115,30 @@ git checkout chore/dockerise-full-stack
    concurrent 401s; queued retries with the new token; and queue rejection,
    logout, and `/login` redirect when refresh fails.
 
+### Feature C10 — Coupons and discounts
+1. Migration `V4__coupon_discount_engine.sql` adds constrained `coupons` and
+   `coupon_redemptions` tables; immutable booking subtotal/discount/coupon
+   snapshots and `slot_locked_at`; and payment reconciliation fields. Existing
+   booking subtotal is backfilled from total with zero discount.
+2. Added the full `module/coupon` architecture: entities → repositories (including
+   pessimistic locks) → service interface/implementation → request/response DTOs
+   → secured controller. Admin manages coupons; customers can validate only.
+3. Validation uses trusted catalog price and is advisory. Booking creation sends
+   the displayed coupon id and amounts; the backend recalculates under lock and
+   rejects changed quotes before taking a slot lock.
+4. Booking creation writes one immutable pricing snapshot and a `RESERVED`
+   redemption. Confirmation/payment/completion makes it `REDEEMED`; unpaid
+   cancellation, rejection, or 11-minute cleanup makes it `RELEASED`.
+   Rescheduling does not extend `slot_locked_at` or reprice the coupon.
+5. Percentage/fixed arithmetic uses two-decimal `BigDecimal` `HALF_UP`, checks
+   minimum spend, optional cap/scope/date/limits, and clamps final total to zero.
+   A zero-total booking confirms without payment.
+6. Late valid settlement for a terminal booking is recorded as SUCCESS but does
+   not revive the booking or touch the coupon; it is flagged for manual
+   refund/reconciliation.
+7. Frontend adds **Admin → Coupons**, RTK API/store/types/routes, and customer
+   Apply/Remove coupon controls with a server quote and subtotal/discount/total.
+
 ### Dockerisation
 1. **Frontend image:** Node build stage runs `npx vite build` → `dist`; nginx
    stage serves `dist` and uses `nginx.conf`.
@@ -380,6 +404,89 @@ grep -R "app/store" frontend/src --include='*.ts' --include='*.tsx'
 `RootState` imports say `import type`; `axiosInstance.ts` does not import
 `app/store` at all.
 
+### 4j. Coupons and discount lifecycle (Feature C10)
+
+#### Browser happy path
+1. Log in as admin → **Coupons** → **Add coupon**. Create `SAVE20`:
+   Percentage `20`, minimum spend `500`, maximum discount `150`, a validity
+   range containing now, global limit `10`, per-customer limit `1`, Active.
+   Leave scopes empty for a global coupon.
+2. Confirm the table shows `0 reserved, 0 redeemed`; edit/toggle works and the
+   code cannot be duplicated with different case/whitespace.
+3. Log in as a customer → **Book Appointment** → select outlet/service/staff/date/
+   time → confirmation step → enter `save20` → **Apply**.
+4. Confirm the UI displays normalized code, trusted subtotal, discount and final
+   total. For a ₹1,000 service, the 20% result is capped: subtotal ₹1,000,
+   discount ₹150, total ₹850.
+5. Confirm booking. A positive total returns `SLOT_LOCKED`; a 100%/large fixed
+   coupon producing zero returns `CONFIRMED` immediately. History retains the
+   server total and coupon snapshot.
+
+#### API quote binding
+```bash
+BASE=http://localhost:8080/api/v1
+# $ADMIN / $CUST are access tokens; IDs are real active records.
+
+# Create a global percentage coupon
+curl -s -X POST $BASE/coupons -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' -d '{
+    "code":"SAVE20","name":"Save twenty","discountType":"PERCENTAGE",
+    "discountValue":20,"minimumSpend":500,"maximumDiscount":150,
+    "validFrom":"2026-08-31T00:00:00Z","validUntil":"2026-12-31T00:00:00Z",
+    "usageLimit":10,"perCustomerLimit":1,"isActive":true
+  }'
+
+# Advisory quote — does NOT reserve usage
+curl -s -X POST $BASE/coupons/validate -H "Authorization: Bearer $CUST" \
+  -H 'Content-Type: application/json' \
+  -d "{\"code\":\" save20 \",\"outletId\":\"$OUTLET_ID\",\"serviceId\":\"$SERVICE_ID\"}"
+
+# Copy data.couponId/subtotalAmount/discountAmount/totalAmount exactly from the
+# quote. Booking rechecks them while holding the coupon row lock.
+curl -i -X POST $BASE/bookings -H "Authorization: Bearer $CUST" \
+  -H 'Content-Type: application/json' -d "{
+    \"outletId\":\"$OUTLET_ID\",\"staffId\":\"$STAFF_ID\",
+    \"serviceId\":\"$SERVICE_ID\",\"scheduledDate\":\"2026-12-01\",
+    \"scheduledTime\":\"14:30\",\"couponCode\":\"SAVE20\",
+    \"expectedCouponId\":\"$COUPON_ID\",
+    \"expectedSubtotalAmount\":1000,\"expectedDiscountAmount\":150,
+    \"expectedTotalAmount\":850
+  }"
+```
+Expected: `201`; booking contains all three amounts and `couponCode: SAVE20`.
+If an admin changes price/rules after validation, the same booking request fails
+with `Coupon quote changed. Please apply the coupon again.` No slot/coupon usage
+is leaked.
+
+#### Mandatory edge-case matrix
+- **No coupon:** omit code and expected fields → subtotal = total, discount = 0.
+- **Minimum/date/active/scope:** below-minimum, expired, inactive, wrong outlet,
+  wrong service/package each fail before a slot is locked.
+- **Fixed > subtotal / 100%:** discount clamps to subtotal, total 0, booking and
+  redemption become CONFIRMED/REDEEMED without payment.
+- **Limits/concurrency:** set global limit `1`, validate from two customers, then
+  submit both bookings concurrently. Exactly one reserves; the other gets usage
+  exhausted. Repeat with per-customer `1` from two tabs for the same customer.
+- **Release:** cancel/reject an unpaid discounted booking or wait >11 minutes;
+  reservation becomes RELEASED and the limit is available again. Cleanup also
+  owner-releases Redis and broadcasts slots.
+- **Redeem:** successful payment/admin confirmation changes RESERVED → REDEEMED;
+  completion is allowed only from CONFIRMED/IN_PROGRESS. Paid cancellation does
+  not restore coupon usage.
+- **Reschedule:** subtotal/discount/total/code remain unchanged and the original
+  `slot_locked_at` deadline is not extended.
+- **Late payment:** settle after booking cancellation/expiry. Payment is SUCCESS
+  with `reconciliationRequired: true`; booking stays terminal and coupon is not
+  redeemed. Process refund/reconciliation manually.
+
+Optional database audit:
+```bash
+docker compose exec postgres psql -U salon_user -d salon_db -c \
+  "SELECT c.code,r.status,r.discount_amount,r.reserved_at,r.redeemed_at,r.released_at
+   FROM coupon_redemptions r JOIN coupons c ON c.id=r.coupon_id
+   ORDER BY r.created_at DESC;"
+```
+
 ## 5. Local testing — Option B: run natively (for active development)
 
 Useful if you want hot-reload instead of rebuilding images.
@@ -422,21 +529,31 @@ docker compose down -v       # also delete Postgres/Redis/MinIO data (fresh star
 | `backend` stuck "starting"/unhealthy | First boot is slow; `docker compose logs backend`. If it exits: check Postgres is healthy and `JWT_SECRET` is ≥ 32 chars. |
 | Frontend loads but API calls 404/blocked | Ensure you open the **frontend** at `:5173` (nginx proxies `/api`), not the Vite dev server, when running via Docker. |
 | `port is already allocated` | Something else uses 5173/8080/5432/6379/9000/9001. Stop it or change the host port mapping in `docker-compose.yml`. |
-| Login fails for admin | Use phone `9999999999` / `Admin@123`. If you ran `down -v`, the seed re-applies on next `up`. |
+| Login fails for admin | Use phone `9999999999` / `Admin@123`. Migration `V5` repairs the seeded hash; ensure it applied (`docker compose logs backend | grep -i "V5\|migrat"`). If you seeded a DB before V5, just restart the backend so Flyway runs V5. |
 | Image uploads fail | Check `docker compose logs minio-init` shows "minio bucket ready" and the `salon-assets` bucket exists in the MinIO console. |
 | Flyway "validate" error on boot | Means an entity/table mismatch; check `docker compose logs backend`. (Verified clean for the current entities.) |
 | White screen with `Cannot access ... before initialization` after pulling | The browser/container still has the old hashed bundle. Run `docker compose build --no-cache frontend && docker compose up -d frontend`, then hard-refresh or use a private window. Confirm `axiosInstance.ts` has no store import. |
+| Valid coupon suddenly rejected at booking | Catalog/coupon rules changed after Apply, or a final use was consumed. Apply again to obtain a fresh locked quote; this is intentional stale-price protection. |
+| Coupon shows usage exhausted after an abandoned booking | Wait for the cleanup cycle (>11 minutes) or verify the booking was cancelled/rejected. Inspect `coupon_redemptions`; a live `RESERVED` record counts toward limits. |
+| Payment succeeded but booking stayed cancelled/rejected | This is deliberate late-settlement protection. Check the payment's `reconciliationRequired/reconciliationReason`, then perform a manual refund/reconciliation. |
+| Admin Coupons page missing after deploy | Rebuild the frontend image without cache and hard-refresh; confirm V4 migrated and `/api/v1/coupons` returns 200 for an ADMIN token. |
 
 ---
 
 ## 8. Notes for the reviewer
 - A live `docker compose up` was **not run in the authoring environment** (no
-  Docker daemon available there). The frontend production build was also
-  unavailable because dependencies could not be downloaded; the sandbox's
-  global TypeScript version rejects the repository's pre-existing `baseUrl`
-  configuration before checking source files. `git diff --check`, the complete
-  import graph, and all auth/refresh paths were cross-verified statically.
-  Please perform §4i's clean production build and browser checks before merging.
-- The admin/staff screens are real API-driven pages. Payment, reminders,
-  duration-aware slots, reviews, and favourites are implemented; the current
-  remaining technical limitations are maintained in `IMPLEMENTATION.md`.
+  Docker daemon available there). Maven source compilation was blocked by the
+  uncached Spring Boot 3.2.0 parent/offline Central access. Frontend dependencies
+  are absent, and the sandbox global TypeScript rejects the repository's
+  pre-existing `baseUrl` configuration. `git diff --check`, conflict-marker and
+  import-graph checks passed; migration/entity contracts, quote binding,
+  concurrency, pricing math, and every redemption/payment transition received
+  two semantic review passes, with the final review approved and zero findings.
+  Run §4i and §4j in a real Docker environment before merging.
+- No automated coupon tests were added because they were outside this requested
+  implementation scope. Execute the mandatory §4j matrix, especially concurrent
+  last-use and stale-quote scenarios.
+- The customer payment checkout UI, automatic refunds, and signed webhook
+  verification remain follow-ups. Positive-total coupon bookings are correctly
+  reserved and priced by the backend, but browser payment completion is not yet
+  wired. Full limitations are maintained in `IMPLEMENTATION.md`.

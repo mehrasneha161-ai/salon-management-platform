@@ -300,6 +300,62 @@ collision-safe random generator with `existsByBookingRef`.
   `frontend/src/app/store.ts`, `frontend/src/App.tsx`, the four layout
   components, and `pages/customer/CustomerDashboard.tsx`.
 
+### C10. Coupons and discount engine
+- **What:** admins can create and manage offer codes; customers can validate and
+  apply a code while booking. Rules support `PERCENTAGE` and `FIXED` discounts,
+  minimum spend, an optional maximum discount, UTC validity windows, global and
+  per-customer limits, active/inactive state, and optional outlet/service/package
+  scopes. Codes are normalized with trim + uppercase and are unique.
+- **Authoritative pricing:** package `price` remains its existing selling price;
+  `discount_pct` is display metadata and is **not applied again**. The server
+  loads the trusted service/package price and uses `BigDecimal` (2 decimals,
+  `HALF_UP`). Percentage discounts are capped when configured; every discount is
+  clamped to the subtotal, so the final total cannot be negative.
+- **Quote binding:** `POST /api/v1/coupons/validate` is advisory and does not
+  consume usage. The customer submits the returned coupon id and subtotal /
+  discount / total with booking creation. Under a pessimistic coupon-row lock,
+  the server recalculates and rejects a stale or changed quote instead of
+  silently charging a different amount.
+- **Immutable booking snapshot:** V4 adds `subtotal_amount`, `discount_amount`,
+  final `total_amount`, coupon id/code/type/value/cap snapshots, and immutable
+  `slot_locked_at`. Existing bookings are backfilled with subtotal = total and
+  discount = zero. Rescheduling preserves both pricing and the original payment
+  deadline.
+- **Concurrency and lifecycle:** `coupon_redemptions` records `RESERVED`,
+  `REDEEMED`, or `RELEASED`. `RESERVED + REDEEMED` count toward limits. Coupon
+  row locking serializes concurrent final-use/per-customer checks. Booking create
+  reserves; payment/admin confirmation and completion redeem idempotently;
+  unpaid cancel/reject/expiry release idempotently. Paid cancellation does not
+  restore usage. A zero-total booking confirms and redeems immediately without a
+  gateway call.
+- **Payment reconciliation:** a verified late settlement cannot resurrect a
+  cancelled/rejected booking. Payment success is persisted with
+  `reconciliation_required` and a reason so a manual refund/reconciliation can
+  be performed.
+- **APIs/UI:** ADMIN CRUD/list/toggle endpoints and a real **Admin → Coupons**
+  page; CUSTOMER validation endpoint and Apply/Remove controls with a complete
+  pricing breakdown on the booking confirmation step. Coupon routes remain
+  authenticated and the RTK slice preserves the store/Axios cycle fix.
+- **Migration/files:** `V4__coupon_discount_engine.sql`, new
+  `backend/.../module/coupon/**`, booking/payment lifecycle files, shared coupon
+  enums, `frontend/src/features/coupon/couponApi.ts`,
+  `pages/admin/AdminCouponsPage.tsx`, `pages/customer/BookingPage.tsx`, and
+  supporting store/type/route/layout files.
+
+### C11. Seeded admin login fix (`Admin@123`)
+- **Symptom:** logging in as the seeded admin (`9999999999` / `Admin@123`)
+  failed, while runtime-registered customers logged in fine.
+- **Root cause:** the V1 seed stored a bcrypt hash that does not correspond to
+  `Admin@123`. Customer registration encodes the password at runtime with the
+  same `BCryptPasswordEncoder(12)`, so only the static seed was wrong. Because
+  `authenticationManager.authenticate(...)` throws on the mismatch, the failure
+  surfaced as a 500 rather than a clean 401.
+- **Fix:** `V5__fix_admin_password_hash.sql` updates the admin row with a
+  correct BCrypt cost-12 `$2a$` hash (verified to match `Admin@123`). V1 is left
+  untouched to preserve its Flyway checksum; V5 repairs existing databases and
+  also corrects fresh installs (V1 seed → V5 repair).
+- **Files:** `backend/src/main/resources/db/migration/V5__fix_admin_password_hash.sql`.
+
 ---
 
 ## Full list of changed / added files
@@ -328,6 +384,15 @@ collision-safe random generator with `existsByBookingRef`.
 | Fix C9 | `frontend/src/services/axiosInstance.ts` | injected, idempotent interceptor setup; no store import |
 | Fix C9 | `frontend/src/app/store.ts` | install Axios interceptors after store creation |
 | Fix C9 | `frontend/src/{App,components/layout/*,pages/customer/CustomerDashboard}.tsx` | type-only `RootState` imports |
+| Feature C10 | `backend/src/main/resources/db/migration/V4__coupon_discount_engine.sql` | coupon/redemption schema, booking snapshots, expiry clock, reconciliation fields |
+| Feature C10 | `backend/src/main/java/com/salon/app/module/coupon/**` | coupon entity/repositories/DTOs/service/controller |
+| Feature C10 | `backend/.../booking/{entity,dto,repository,service,scheduler}` | trusted quote binding and redemption lifecycle |
+| Feature C10 | `backend/.../payment/{entity,dto,service}` | redemption on settlement + late-payment reconciliation |
+| Feature C10 | `frontend/src/features/coupon/couponApi.ts` | customer validation + admin coupon API |
+| Feature C10 | `frontend/src/pages/admin/AdminCouponsPage.tsx` | real coupon administration UI |
+| Feature C10 | `frontend/src/pages/customer/BookingPage.tsx` | Apply/Remove coupon and pricing breakdown |
+| Feature C10 | `frontend/src/{types,constants,app}/**`, `App.tsx`, `AdminLayout.tsx` | types, store registration, route/menu plumbing |
+| Fix C11 | `backend/src/main/resources/db/migration/V5__fix_admin_password_hash.sql` | repair seeded admin hash so `Admin@123` logs in |
 
 ---
 
@@ -340,8 +405,22 @@ collision-safe random generator with `existsByBookingRef`.
   stricter `tsc && vite build`; keep an explicit compatible TypeScript check in CI.
 - Razorpay signature verification is skipped only when no key secret is
   configured for local development. A real deployment must always provide the
-  secret.
+  secret. The public webhook still needs raw-body gateway signature validation
+  before production use.
+- The customer frontend still has no Razorpay checkout action (a pre-existing
+  payment UI gap): positive-total bookings navigate to history after the slot is
+  reserved. The backend payment APIs and discounted amount are authoritative,
+  but a checkout/pay-retry screen is the next required UI feature.
+- Paid cancellation does not automatically refund or restore coupon usage.
+  Verified late settlement for a terminal booking is persisted and marked
+  `reconciliation_required`, but refund/reconciliation execution is manual.
+- Coupon limits are serialized with a pessimistic coupon-row lock. This is
+  correct but may become a hotspot for very high-volume flash offers; a future
+  conditional counter update can improve throughput.
+- No automated coupon tests were added (per the current implementation scope).
+  The manual concurrency/lifecycle matrix is documented in `HANDOFF.md`.
 - A live Docker/browser run could not be performed in the authoring sandbox
-  (no Docker daemon and frontend packages unavailable). The cycle removal and
-  auth paths were statically cross-verified; run the exact browser checks in
+  (no Docker daemon and frontend packages unavailable). The import graph,
+  migration/entity alignment, quote binding, pricing math, and lifecycle paths
+  were statically and semantically cross-verified; run the exact checks in
   `HANDOFF.md` before merging.

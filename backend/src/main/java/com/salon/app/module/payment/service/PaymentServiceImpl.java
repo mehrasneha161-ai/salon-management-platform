@@ -3,6 +3,7 @@ package com.salon.app.module.payment.service;
 import com.salon.app.module.booking.entity.Booking;
 import com.salon.app.module.booking.event.BookingConfirmedEvent;
 import com.salon.app.module.booking.repository.BookingRepository;
+import com.salon.app.module.coupon.service.CouponService;
 import com.salon.app.module.payment.dto.request.InitiatePaymentRequest;
 import com.salon.app.module.payment.dto.request.VerifyPaymentRequest;
 import com.salon.app.module.payment.dto.response.PaymentResponse;
@@ -12,6 +13,8 @@ import com.salon.app.shared.enums.BookingStatus;
 import com.salon.app.shared.enums.PaymentStatus;
 import com.salon.app.shared.exception.BusinessException;
 import com.salon.app.shared.exception.ResourceNotFoundException;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +37,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final BookingRepository bookingRepository;
+    private final CouponService couponService;
+    private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
 
     @Value("${payment.razorpay.key-id:}")
@@ -52,6 +57,9 @@ public class PaymentServiceImpl implements PaymentService {
         if (!booking.getCustomer().getId().equals(customerId)) {
             throw new BusinessException("You can only pay for your own bookings");
         }
+        if (booking.getTotalAmount().signum() == 0) {
+            throw new BusinessException("No payment is required for this booking");
+        }
         if (booking.getStatus() != BookingStatus.SLOT_LOCKED) {
             throw new BusinessException("This booking is not awaiting payment");
         }
@@ -67,6 +75,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .currency("INR")
                     .gateway("razorpay")
                     .status(PaymentStatus.PENDING)
+                    .reconciliationRequired(false)
                     .build();
         }
         // A gateway order reference. With the Razorpay SDK this would be the real
@@ -128,23 +137,51 @@ public class PaymentServiceImpl implements PaymentService {
     // ---------------------------------------------------------------- helpers
 
     private void markPaidAndConfirm(Payment payment, String gatewayPaymentId) {
+        Booking booking = bookingRepository.findByIdForUpdate(payment.getBooking().getId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Booking", "id", payment.getBooking().getId()));
+        // The payment ownership check may already have initialized this entity. Refresh while
+        // holding the row lock so terminal state changes cannot be overwritten by a late callback.
+        entityManager.refresh(booking, LockModeType.PESSIMISTIC_WRITE);
+
         payment.setStatus(PaymentStatus.SUCCESS);
         payment.setPaidAt(Instant.now());
         if (gatewayPaymentId != null && !gatewayPaymentId.isBlank()) {
             payment.setGatewayTxnId(gatewayPaymentId);
         }
+
+        if (booking.getStatus() != BookingStatus.SLOT_LOCKED
+                && booking.getStatus() != BookingStatus.CONFIRMED) {
+            String reason = "Payment settled after booking entered " + booking.getStatus()
+                    + "; manual refund or reconciliation is required.";
+            payment.setReconciliationRequired(true);
+            payment.setReconciliationReason(reason);
+            paymentRepository.save(payment);
+            log.error("Payment {} settled for booking {} in {} status; manual refund or "
+                            + "reconciliation is required",
+                    payment.getId(), booking.getBookingRef(), booking.getStatus());
+            return;
+        }
+
+        boolean newlyConfirmed = booking.getStatus() == BookingStatus.SLOT_LOCKED;
+        payment.setReconciliationRequired(false);
+        payment.setReconciliationReason(null);
+        couponService.redeem(booking.getId());
         paymentRepository.save(payment);
 
-        Booking booking = payment.getBooking();
-        booking.setStatus(BookingStatus.CONFIRMED);
-        // Initialise lazy associations in-transaction for the async handlers.
-        booking.getCustomer().getFullName();
-        booking.getCustomer().getEmail();
-        booking.getCustomer().getPhoneNumber();
-        booking.getOutlet().getName();
-        bookingRepository.save(booking);
-        eventPublisher.publishEvent(new BookingConfirmedEvent(this, booking));
-        log.info("Payment success -> booking {} CONFIRMED", booking.getBookingRef());
+        if (newlyConfirmed) {
+            booking.setStatus(BookingStatus.CONFIRMED);
+            // Initialise lazy associations in-transaction for the async handlers.
+            booking.getCustomer().getFullName();
+            booking.getCustomer().getEmail();
+            booking.getCustomer().getPhoneNumber();
+            booking.getOutlet().getName();
+            bookingRepository.save(booking);
+            eventPublisher.publishEvent(new BookingConfirmedEvent(this, booking));
+            log.info("Payment success -> booking {} CONFIRMED", booking.getBookingRef());
+        } else {
+            log.info("Payment success recorded for already confirmed booking {}", booking.getBookingRef());
+        }
     }
 
     /**
@@ -185,6 +222,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .orderRef(p.getGatewayTxnId())
                 .keyId(includeKey ? razorpayKeyId : null)
                 .paidAt(p.getPaidAt())
+                .reconciliationRequired(p.isReconciliationRequired())
+                .reconciliationReason(p.getReconciliationReason())
                 .build();
     }
 }
