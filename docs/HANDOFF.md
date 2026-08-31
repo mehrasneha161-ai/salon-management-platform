@@ -70,6 +70,13 @@ git checkout chore/dockerise-full-stack
    `DELETE /staff/leave/{leaveId}`; outlet hours flow through the outlet
    create/update API.
 
+### Feature C3 — Duration-aware slots (no overlaps)
+1. `getAvailableSlots` builds busy intervals `[start, start+duration)` from
+   existing bookings and only offers a start if the full requested service fits
+   before closing and overlaps nothing.
+2. Added `SlotAvailabilityService.hasConflict(...)`; `createBooking` and
+   `rescheduleBooking` call it and reject overlaps (409) server-side.
+
 ### Dockerisation
 1. **Frontend image:** Node build stage runs `npx vite build` → `dist`; nginx
    stage serves `dist` and uses `nginx.conf`.
@@ -248,6 +255,17 @@ curl -s "$BASE/slots/available?outletId=$OUTLET_ID&staffId=$STAFF_ID&date=2026-1
 ```
 Expected: after setting the shift, slots are limited to the shift window; after
 adding leave, the slot list for that date is `[]`.
+
+### 4e. Duration-aware slots (Feature C3)
+1. Create a booking for a stylist at **09:00** with a **60-minute** service.
+2. Fetch slots for that stylist/date with `durationMinutes=30`:
+   ```bash
+   curl -s "$BASE/slots/available?outletId=$OUTLET_ID&staffId=$STAFF_ID&date=2026-12-01&durationMinutes=30"
+   ```
+   **Expected:** `09:30` is **absent** (previously it was offered), and `10:00`
+   onward is available.
+3. Try to create/reschedule a booking at **09:30** for that stylist → **409**
+   "overlaps another booking".
 
 ## 5. Local testing — Option B: run natively (for active development)
 

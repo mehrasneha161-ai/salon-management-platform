@@ -166,6 +166,26 @@ entire stack.** Several things blocked a clean bring-up; each was fixed.
     narrowed by the staff shift** (and returns empty for an invalid/empty window).
 - **Migration:** `V2__working_hours_and_leaves.sql` (adds the columns + the
   `staff_leaves` table).
+- **Files:** see the change table below.
+
+### C3. Duration-aware slots (no more overlapping bookings)
+- **Problem fixed:** the slot logic only removed each booking's exact **start**
+  time, ignoring its duration — so a 60-min booking at 09:00 left 09:30 bookable,
+  and `createBooking` (guarded only by the exact-slot Redis lock) let an
+  overlapping booking at a *different* start time go through.
+- **What was added:**
+  - `getAvailableSlots` now treats each existing booking as an interval
+    `[start, start+duration)` and only offers a start slot if the **whole
+    requested service** `[start, start+durationMinutes)` fits before closing and
+    overlaps nothing (so 09:30 is correctly blocked behind a 09:00×60 booking,
+    and starts too late to finish are dropped).
+  - New `SlotAvailabilityService.hasConflict(staffId, date, start, duration,
+    excludeBookingId)` used by **`createBooking`** and **`rescheduleBooking`** to
+    reject overlapping bookings server-side (409), not just hide them in the picker.
+- **Known limitation:** the check is duration-aware but, like the rest of the
+  flow, isn't fully serialized against simultaneous different-start requests
+  (the Redis lock is per exact slot). A DB exclusion constraint or a staff+date
+  lock would close that last race — noted for a future hardening PR.
 - **Files:** `V2__...sql`, `outlet/entity/Outlet.java`,
   `staff/entity/StaffProfile.java`, `staff/entity/StaffLeave.java` (new),
   `staff/repository/StaffLeaveRepository.java` (new),

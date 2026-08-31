@@ -1,5 +1,6 @@
 package com.salon.app.module.booking.service;
 
+import com.salon.app.module.booking.entity.Booking;
 import com.salon.app.module.booking.repository.BookingRepository;
 import com.salon.app.module.outlet.entity.Outlet;
 import com.salon.app.module.outlet.repository.OutletRepository;
@@ -13,9 +14,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,9 +35,10 @@ public class SlotAvailabilityService {
     private static final LocalTime DEFAULT_CLOSE = LocalTime.of(20, 0);
 
     public List<String> getAvailableSlots(UUID outletId, UUID staffId, LocalDate date, int durationMinutes) {
-        log.info("Getting available slots for outlet: {}, staff: {}, date: {}", outletId, staffId, date);
+        log.info("Getting available slots for outlet: {}, staff: {}, date: {}, duration: {}",
+                outletId, staffId, date, durationMinutes);
 
-        // 1. If the staff is on leave that day, nothing is available.
+        // 1. Staff on leave that day -> nothing is available.
         if (staffLeaveRepository
                 .existsByStaffIdAndIsDeletedFalseAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
                         staffId, date, date)) {
@@ -47,7 +49,6 @@ public class SlotAvailabilityService {
         // 2. Effective working window = outlet hours narrowed by the staff shift.
         LocalTime open = DEFAULT_OPEN;
         LocalTime close = DEFAULT_CLOSE;
-
         Outlet outlet = outletRepository.findById(outletId).orElse(null);
         if (outlet != null) {
             if (outlet.getOpeningTime() != null) open = outlet.getOpeningTime();
@@ -59,20 +60,52 @@ public class SlotAvailabilityService {
             if (staff.getShiftEnd() != null && staff.getShiftEnd().isBefore(close)) close = staff.getShiftEnd();
         }
         if (!open.isBefore(close)) {
-            return List.of(); // empty or invalid window (e.g. shift outside outlet hours)
+            return List.of();
         }
 
-        // 3. Generate the grid and remove booked + locked slots.
-        List<String> allSlots = generateTimeSlots(open, close);
-        List<String> bookedSlots = bookingRepository
-                .findActiveBookingsForStaffOnDate(staffId, date)
-                .stream()
-                .map(b -> b.getScheduledTime().toString())
-                .collect(Collectors.toList());
-        return allSlots.stream()
-                .filter(slot -> !bookedSlots.contains(slot))
-                .filter(slot -> !slotLockService.isLocked(outletId, date, LocalTime.parse(slot), staffId))
-                .collect(Collectors.toList());
+        // 3. Build busy intervals from existing bookings (start .. start+duration).
+        int duration = durationMinutes <= 0 ? SLOT_INTERVAL_MINUTES : durationMinutes;
+        List<int[]> busy = new ArrayList<>();
+        for (Booking b : bookingRepository.findActiveBookingsForStaffOnDate(staffId, date)) {
+            int bs = toMinutes(b.getScheduledTime());
+            busy.add(new int[]{bs, bs + b.getDurationMinutes()});
+        }
+
+        // 4. A start slot is available only if the WHOLE service [start, start+duration)
+        //    fits before closing, overlaps no existing booking, and isn't locked.
+        int openM = toMinutes(open);
+        int closeM = toMinutes(close);
+        List<String> result = new ArrayList<>();
+        for (int startM = openM; startM + duration <= closeM; startM += SLOT_INTERVAL_MINUTES) {
+            int endM = startM + duration;
+            boolean overlaps = false;
+            for (int[] iv : busy) {
+                if (startM < iv[1] && iv[0] < endM) { overlaps = true; break; }
+            }
+            if (overlaps) continue;
+            LocalTime slot = LocalTime.of(startM / 60, startM % 60);
+            if (slotLockService.isLocked(outletId, date, slot, staffId)) continue;
+            result.add(slot.toString());
+        }
+        return result;
+    }
+
+    /**
+     * True if a service of {@code durationMinutes} starting at {@code start} would
+     * overlap any existing active booking for the staff on that date. Pass
+     * {@code excludeBookingId} to ignore a booking being rescheduled.
+     */
+    public boolean hasConflict(UUID staffId, LocalDate date, LocalTime start,
+                               int durationMinutes, UUID excludeBookingId) {
+        int s = toMinutes(start);
+        int e = s + (durationMinutes <= 0 ? SLOT_INTERVAL_MINUTES : durationMinutes);
+        for (Booking b : bookingRepository.findActiveBookingsForStaffOnDate(staffId, date)) {
+            if (excludeBookingId != null && excludeBookingId.equals(b.getId())) continue;
+            int bs = toMinutes(b.getScheduledTime());
+            int be = bs + b.getDurationMinutes();
+            if (s < be && bs < e) return true;
+        }
+        return false;
     }
 
     public void broadcastSlotUpdate(UUID outletId, LocalDate date) {
@@ -81,13 +114,7 @@ public class SlotAvailabilityService {
         log.info("Broadcasted slot update to: {}", destination);
     }
 
-    private List<String> generateTimeSlots(LocalTime start, LocalTime end) {
-        List<String> slots = new java.util.ArrayList<>();
-        LocalTime current = start;
-        while (current.isBefore(end)) {
-            slots.add(current.toString());
-            current = current.plusMinutes(SLOT_INTERVAL_MINUTES);
-        }
-        return slots;
+    private int toMinutes(LocalTime t) {
+        return t.getHour() * 60 + t.getMinute();
     }
 }

@@ -65,15 +65,7 @@ public class BookingServiceImpl implements BookingService {
         StaffProfile staff = staffProfileRepository.findById(request.getStaffId())
                 .orElseThrow(() -> new ResourceNotFoundException("Staff", "id", request.getStaffId()));
 
-        // Attempt slot lock
-        String sessionId = request.getSessionId() != null ? request.getSessionId() : UUID.randomUUID().toString();
-        boolean locked = slotLockService.tryLock(
-                request.getOutletId(), request.getScheduledDate(),
-                request.getScheduledTime(), request.getStaffId(), sessionId);
-        if (!locked) {
-            throw new SlotAlreadyLockedException("This slot is currently being booked by another customer. Please select a different slot.");
-        }
-
+        // Resolve the service/package first so we know how long the booking is.
         SalonService service = null;
         ServicePackage pkg = null;
         BigDecimal amount = BigDecimal.ZERO;
@@ -89,6 +81,22 @@ public class BookingServiceImpl implements BookingService {
                     .orElseThrow(() -> new ResourceNotFoundException("Package", "id", request.getPackageId()));
             amount = pkg.getPrice();
             duration = pkg.getServices().stream().mapToInt(SalonService::getDurationMinutes).sum();
+        }
+
+        // Reject if the WHOLE service window would overlap an existing booking
+        // for this stylist (duration-aware, e.g. a 60-min service at 09:00 blocks 09:30).
+        if (slotAvailabilityService.hasConflict(request.getStaffId(), request.getScheduledDate(),
+                request.getScheduledTime(), duration, null)) {
+            throw new SlotAlreadyLockedException("This time overlaps another booking for the selected stylist. Please pick a different slot.");
+        }
+
+        // Attempt slot lock
+        String sessionId = request.getSessionId() != null ? request.getSessionId() : UUID.randomUUID().toString();
+        boolean locked = slotLockService.tryLock(
+                request.getOutletId(), request.getScheduledDate(),
+                request.getScheduledTime(), request.getStaffId(), sessionId);
+        if (!locked) {
+            throw new SlotAlreadyLockedException("This slot is currently being booked by another customer. Please select a different slot.");
         }
 
         String bookingRef = generateBookingRef();
@@ -215,6 +223,12 @@ public class BookingServiceImpl implements BookingService {
                 && request.getScheduledTime().equals(booking.getScheduledTime());
         if (sameSlot) {
             throw new BusinessException("The booking is already at this date, time and stylist");
+        }
+
+        // Duration-aware overlap check for the new slot (ignoring this booking itself).
+        if (slotAvailabilityService.hasConflict(targetStaff.getId(), request.getScheduledDate(),
+                request.getScheduledTime(), booking.getDurationMinutes(), booking.getId())) {
+            throw new SlotAlreadyLockedException("That time overlaps another booking for the stylist. Please pick a different time.");
         }
 
         // Lock the NEW slot first; only then give up the old one.
