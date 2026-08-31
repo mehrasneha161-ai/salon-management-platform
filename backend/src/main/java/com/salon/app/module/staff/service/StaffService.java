@@ -15,6 +15,8 @@ public interface StaffService {
     StaffResponse registerStaff(RegisterStaffRequest request);
     List<StaffResponse> getStaff(UUID outletId, StaffStatus status);
     StaffResponse getStaffById(UUID id);
+    /** The logged-in staff member's own profile, resolved from their user id. */
+    StaffResponse getMyProfile(UUID userId);
     StaffResponse updateStatus(UUID staffId, StaffStatus status);
     StaffResponse updateShift(UUID staffId, UpdateShiftRequest request);
     AttendanceResponse checkIn(UUID userId);

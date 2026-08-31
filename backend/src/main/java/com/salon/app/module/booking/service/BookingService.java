@@ -9,6 +9,7 @@ import com.salon.app.shared.response.PagedResponse;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public interface BookingService {
@@ -20,4 +21,6 @@ public interface BookingService {
     BookingResponse completeBooking(UUID bookingId);
     BookingResponse cancelBooking(UUID bookingId, UUID customerId);
     BookingResponse rescheduleBooking(UUID bookingId, UUID customerId, RescheduleBookingRequest request);
+    /** Bookings assigned to the logged-in staff member (optionally for one date). */
+    List<BookingResponse> getAssignedBookings(UUID staffUserId, LocalDate date);
 }

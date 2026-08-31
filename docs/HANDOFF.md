@@ -86,6 +86,21 @@ git checkout chore/dockerise-full-stack
    (`JavaMailSender`, async, best-effort). `approveBooking` pre-initialises
    associations so async handlers don't hit lazy-loading errors.
 
+### Features C5–C8 — Payment, reviews, favourites, admin/staff UI
+1. **Payment** (`module/payment`): entity/repo/DTOs/service/controller. `initiate`
+   creates a PENDING payment for a `SLOT_LOCKED` booking; `verify` checks the
+   Razorpay HMAC (skipped in dev when no key-secret) then marks payment SUCCESS,
+   sets the booking CONFIRMED and publishes `BookingConfirmedEvent`; `webhook`
+   does the same out-of-band.
+2. **Reviews** (`module/review`) and **Favourites** (`module/favourite`) added with
+   the same module layout; favourites uses an `@IdClass` composite key.
+3. **Admin/Staff UI:** all placeholder pages replaced with real API-driven screens;
+   added missing routes (`/admin/outlets`, `/staff/attendance`).
+4. **Backend gaps found by walking the UI as each role** and then added:
+   `GET /staff/me`, `GET /bookings/assigned`, `GET /service-categories`.
+5. Re-applied the two PR #1 fixes (attendance crash, `booking_ref`) which were
+   missing on this branch.
+
 ### Dockerisation
 1. **Frontend image:** Node build stage runs `npx vite build` → `dist`; nginx
    stage serves `dist` and uses `nginx.conf`.
@@ -275,6 +290,46 @@ adding leave, the slot list for that date is `[]`.
    onward is available.
 3. Try to create/reschedule a booking at **09:30** for that stylist → **409**
    "overlaps another booking".
+
+### 4f. Payment → booking confirmed (Feature C5)
+```bash
+BASE=http://localhost:8080/api/v1
+# $CUST = customer token, $BOOKING_ID = a booking in SLOT_LOCKED state
+
+# 1. Initiate — returns the payment id + order reference, status PENDING
+curl -s -X POST $BASE/payments/initiate -H "Authorization: Bearer $CUST" \
+  -H 'Content-Type: application/json' -d "{\"bookingId\":\"$BOOKING_ID\"}"
+
+# 2. Verify (dev mode: no RAZORPAY_KEY_SECRET set -> signature check skipped)
+curl -s -X POST $BASE/payments/verify -H "Authorization: Bearer $CUST" \
+  -H 'Content-Type: application/json' -d "{\"paymentId\":\"$PAYMENT_ID\"}"
+```
+**Expected:** verify returns `status: SUCCESS`, the booking becomes **CONFIRMED**,
+and confirmation WhatsApp/email are queued. Verifying twice is safe (idempotent).
+
+### 4g. Reviews & favourites (Feature C6)
+```bash
+# Review a COMPLETED booking (admin/staff must mark it complete first)
+curl -i -X POST $BASE/reviews -H "Authorization: Bearer $CUST" \
+  -H 'Content-Type: application/json' \
+  -d "{\"bookingId\":\"$BOOKING_ID\",\"rating\":5,\"comment\":\"Great service\"}"
+# -> 201. Reviewing a non-completed booking or reviewing twice -> 400.
+
+curl -s $BASE/reviews/staff/$STAFF_ID           # public list
+curl -s $BASE/favourites -H "Authorization: Bearer $CUST"
+curl -i -X POST   $BASE/favourites/$STAFF_ID -H "Authorization: Bearer $CUST"
+curl -i -X DELETE $BASE/favourites/$STAFF_ID -H "Authorization: Bearer $CUST"
+```
+
+### 4h. Admin & Staff UI (Feature C7)
+In the browser at http://localhost:5173:
+- **Admin** (`9999999999` / `Admin@123`): check every sidebar item —
+  Dashboard, Bookings (Approve/Reject/Complete buttons), Staff (+ Register staff),
+  Services (tabs + Add service), **Outlets (set opening/closing time)**,
+  Gallery, Analytics, Notifications (broadcast/campaign).
+- **Staff** (log in as a staff member you registered): Dashboard shows present
+  days, a **status dropdown**, **Check in / Check out**, and today's assigned
+  bookings with a *Complete* action; the **Attendance** page shows full history.
 
 ## 5. Local testing — Option B: run natively (for active development)
 

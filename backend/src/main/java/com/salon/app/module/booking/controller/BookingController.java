@@ -111,6 +111,15 @@ public class BookingController {
                 bookingService.rescheduleBooking(id, customerId, request)));
     }
 
+    @GetMapping("/bookings/assigned")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getAssignedBookings(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.getAssignedBookings(resolveUserId(userDetails), date)));
+    }
+
     @GetMapping("/slots/available")
     public ResponseEntity<ApiResponse<List<String>>> getAvailableSlots(
             @RequestParam UUID outletId,

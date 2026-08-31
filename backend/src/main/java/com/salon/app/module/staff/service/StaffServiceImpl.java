@@ -84,6 +84,13 @@ public class StaffServiceImpl implements StaffService {
     }
 
     @Override
+    public StaffResponse getMyProfile(UUID userId) {
+        StaffProfile profile = staffProfileRepository.findByUserIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("StaffProfile", "userId", userId));
+        return toResponse(profile);
+    }
+
+    @Override
     @Transactional
     public StaffResponse updateStatus(UUID staffId, StaffStatus status) {
         log.info("Updating staff {} status to {}", staffId, status);

@@ -2,6 +2,7 @@ package com.salon.app.module.service.controller;
 
 import com.salon.app.module.service.dto.request.PackageRequest;
 import com.salon.app.module.service.dto.request.ServiceRequest;
+import com.salon.app.module.service.dto.response.CategoryResponse;
 import com.salon.app.module.service.dto.response.PackageResponse;
 import com.salon.app.module.service.dto.response.ServiceResponse;
 import com.salon.app.module.service.service.SalonServiceManager;
@@ -21,6 +22,11 @@ import java.util.UUID;
 public class ServiceController {
 
     private final SalonServiceManager salonServiceManager;
+
+    @GetMapping("/api/v1/service-categories")
+    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getCategories() {
+        return ResponseEntity.ok(ApiResponse.success(salonServiceManager.getCategories()));
+    }
 
     @GetMapping("/api/v1/services")
     public ResponseEntity<ApiResponse<List<ServiceResponse>>> getServices(

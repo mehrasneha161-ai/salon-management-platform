@@ -61,6 +61,13 @@ export const bookingApi = createApi({
       }),
       invalidatesTags: ['Booking'],
     }),
+    getAssignedBookings: builder.query<ApiResponse<Booking[]>, { date?: string }>({
+      query: ({ date } = {}) => ({
+        url: date ? `${API_ROUTES.BOOKINGS}/assigned?date=${date}` : `${API_ROUTES.BOOKINGS}/assigned`,
+        method: 'GET',
+      }),
+      providesTags: ['Booking'],
+    }),
     getAvailableSlots: builder.query<ApiResponse<string[]>, { outletId: string; staffId: string; date: string; durationMinutes?: number }>({
       query: ({ outletId, staffId, date, durationMinutes = 30 }) => ({
         url: `${API_ROUTES.SLOTS}?outletId=${outletId}&staffId=${staffId}&date=${date}&durationMinutes=${durationMinutes}`,
@@ -79,5 +86,6 @@ export const {
   useCompleteBookingMutation,
   useCancelBookingMutation,
   useRescheduleBookingMutation,
+  useGetAssignedBookingsQuery,
   useGetAvailableSlotsQuery,
 } = bookingApi

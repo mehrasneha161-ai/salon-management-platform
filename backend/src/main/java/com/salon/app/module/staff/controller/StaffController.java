@@ -38,6 +38,14 @@ public class StaffController {
         return ResponseEntity.ok(ApiResponse.success(staffService.getStaff(outletId, status)));
     }
 
+    // Must be declared before /{id} so "me" isn't parsed as a UUID path variable.
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<StaffResponse>> getMyProfile(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success(staffService.getMyProfile(resolveUserId(userDetails))));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<StaffResponse>> getStaffById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(staffService.getStaffById(id)));

@@ -214,6 +214,68 @@ entire stack.** Several things blocked a clean bring-up; each was fixed.
   email handlers don't hit lazy-loading errors.
 - **Migration:** `V3__booking_reminder_flag.sql` (adds `bookings.reminder_sent`).
 
+### C5. Payment module (completes the booking flow)
+- **Problem fixed:** the documented flow is *slot lock → payment → confirm*, and
+  the `payments` table + Razorpay config existed, but **no payment code existed**,
+  so a booking could never be completed by the customer.
+- **What was added** (`module/payment`, following the standard module layout):
+  - `POST /api/v1/payments/initiate` — validates ownership + that the booking is
+    `SLOT_LOCKED`, creates/reuses a `PENDING` payment and returns an order
+    reference plus the public gateway key for checkout.
+  - `POST /api/v1/payments/verify` — verifies the Razorpay HMAC-SHA256 signature
+    (skipped when no key-secret is configured, so the flow is testable in dev),
+    marks the payment `SUCCESS`, moves the booking to **CONFIRMED**, and publishes
+    `BookingConfirmedEvent` (→ WhatsApp + email). Idempotent if already paid.
+  - `POST /api/v1/payments/webhook` — public endpoint (already allow-listed in
+    `SecurityConfig`) that marks payment success out-of-band.
+  - `GET /api/v1/payments/booking/{bookingId}` — payment status for a booking.
+- **Files:** `payment/{entity,repository,dto,service,controller}`.
+
+### C6. Reviews & favourite stylists
+- **Problem fixed:** both features were advertised and had tables, but no code.
+- **Reviews** (`module/review`): `POST /api/v1/reviews` (customer can review only
+  their **own COMPLETED** booking, one review per booking),
+  `GET /api/v1/reviews/staff/{staffId}` (public) and `GET /api/v1/reviews/my`.
+- **Favourites** (`module/favourite`): `POST`/`DELETE /api/v1/favourites/{staffId}`
+  and `GET /api/v1/favourites`, using a composite-key (`@IdClass`) entity that
+  matches the `favorite_staff` table; add is idempotent.
+
+### C7. Real Admin & Staff frontend
+- **Problem fixed:** only customer pages existed; the admin/staff screens were
+  placeholders (and two menu links had no route at all), so owner/staff couldn't
+  use the app.
+- **Admin pages (real, API-driven):** Dashboard (revenue/bookings/outlet KPIs),
+  **Bookings** (approve / reject / complete, paginated), **Staff** (list, register
+  modal, live status change), **Services & Packages** (tabs, create/delete),
+  **Outlets** (CRUD **including business hours** — the UI for feature C2),
+  **Analytics** (revenue by outlet + popular services), **Notifications**
+  (WhatsApp broadcast to selected numbers + campaign to all customers), **Gallery**
+  (before/after grid with delete).
+- **Staff pages (real):** Dashboard (present-days, today's count, **status
+  switch**, check-in/out, today's assigned bookings with *Complete*) and a
+  dedicated **Attendance** page (mark attendance + full history).
+- **Supporting backend additions required by these screens** (found by
+  mentally walking the UI as each role):
+  - `GET /api/v1/staff/me` — a staff member had **no way** to load their own
+    profile (needed for status/attendance/bookings, since every other endpoint
+    needs a `staffId` they don't know).
+  - `GET /api/v1/bookings/assigned` — staff-scoped booking list (the admin list is
+    ADMIN-only and not filterable by staff).
+  - `GET /api/v1/service-categories` — the admin "add service" form needs a
+    category dropdown; there was no way to list categories.
+- **Frontend plumbing:** new `paymentApi`, `reviewApi`, `favouriteApi` RTK Query
+  slices (registered in the store), new route constants, `getCategories`,
+  `getMyStaffProfile`, `getAssignedBookings` hooks, and routes for
+  `/admin/outlets` + `/staff/attendance`.
+
+### C8. Re-applied the two PR #1 bug fixes on this branch
+While cross-verifying, the attendance crash and the `booking_ref` collision fix
+were found **missing on this branch** (they were committed only on
+`fix/staff-attendance-and-booking-ref`, and this branch was cut from the default
+branch). Both are now applied here so the branch is self-consistent:
+`StaffController` resolves phone → userId, and `booking_ref` uses the
+collision-safe random generator with `existsByBookingRef`.
+
 ---
 
 ## Full list of changed / added files
