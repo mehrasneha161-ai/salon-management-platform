@@ -11,6 +11,7 @@ import { notificationApi } from '../features/notification/notificationApi'
 import { paymentApi } from '../features/payment/paymentApi'
 import { reviewApi } from '../features/review/reviewApi'
 import { favouriteApi } from '../features/favourite/favouriteApi'
+import { setupAxiosInterceptors } from '../services/axiosInstance'
 
 export const store = configureStore({
   reducer: {
@@ -42,6 +43,8 @@ export const store = configureStore({
       favouriteApi.middleware
     ),
 })
+
+setupAxiosInterceptors(store)
 
 export type RootState = ReturnType<typeof store.getState>
 export type AppDispatch = typeof store.dispatch

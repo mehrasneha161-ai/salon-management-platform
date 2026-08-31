@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { RootState } from './app/store'
+import type { RootState } from './app/store'
 import { APP_ROUTES } from './constants'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'

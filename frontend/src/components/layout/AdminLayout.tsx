@@ -7,7 +7,7 @@ import {
   UserOutlined, LogoutOutlined
 } from '@ant-design/icons'
 import { logout } from '../../features/auth/authSlice'
-import { RootState } from '../../app/store'
+import type { RootState } from '../../app/store'
 import { APP_ROUTES } from '../../constants'
 
 const { Header, Sider, Content } = Layout

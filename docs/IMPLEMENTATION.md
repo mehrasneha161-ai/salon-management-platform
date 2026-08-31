@@ -276,6 +276,30 @@ branch). Both are now applied here so the branch is self-consistent:
 `StaffController` resolves phone → userId, and `booking_ref` uses the
 collision-safe random generator with `existsByBookingRef`.
 
+### C9. Frontend production white screen (Redux store ↔ Axios cycle)
+- **Symptom:** the production bundle crashed before React mounted with
+  `Uncaught ReferenceError: Cannot access 'Ol' before initialization`, leaving a
+  completely white screen.
+- **Root cause:** a runtime circular dependency was introduced by the auth API
+  chain: `store.ts → authApi.ts → axiosBaseQuery.ts → axiosInstance.ts → store.ts`.
+  The minified production bundle evaluated the imported store binding before
+  `configureStore(...)` initialized it. Development/module ordering could hide
+  this temporal-dead-zone failure, so changing import order would not be a safe fix.
+- **Fix:** `axiosInstance.ts` no longer imports the store singleton. It exports
+  `setupAxiosInterceptors(storeLike)` and receives only the minimal
+  `getState`/`dispatch` contract it needs. `store.ts` creates the Redux store
+  first, then installs the interceptors. Installation is idempotent so repeated
+  setup/HMR does not register duplicate handlers.
+- **Preserved behaviour:** Bearer token injection, the single-flight refresh
+  guard, queuing/retrying concurrent 401 requests, `setTokens`, failed-refresh
+  logout, and `/login` redirect are unchanged.
+- **Import hygiene:** every component that needs only `RootState` now uses
+  `import type`; `main.tsx` remains the only external runtime consumer of the
+  store singleton.
+- **Files:** `frontend/src/services/axiosInstance.ts`,
+  `frontend/src/app/store.ts`, `frontend/src/App.tsx`, the four layout
+  components, and `pages/customer/CustomerDashboard.tsx`.
+
 ---
 
 ## Full list of changed / added files
@@ -301,17 +325,23 @@ collision-safe random generator with `existsByBookingRef`.
 | Feature C1 | `booking/controller/BookingController.java` | `PUT /bookings/{id}/reschedule` |
 | Feature C1 | `frontend/.../booking/bookingApi.ts` | `rescheduleBooking` mutation |
 | Feature C1 | `frontend/.../customer/BookingHistoryPage.tsx` | Reschedule button + modal |
+| Fix C9 | `frontend/src/services/axiosInstance.ts` | injected, idempotent interceptor setup; no store import |
+| Fix C9 | `frontend/src/app/store.ts` | install Axios interceptors after store creation |
+| Fix C9 | `frontend/src/{App,components/layout/*,pages/customer/CustomerDashboard}.tsx` | type-only `RootState` imports |
 
 ---
 
 ## Known limitations / recommended follow-ups
-- The **admin/staff pages are placeholders** (so the build & routes work). Wire
-  them to the existing APIs (bookings approve/reject, analytics charts, staff
-  attendance, broadcasts) in a follow-up.
-- The frontend image runs `vite build` (esbuild) directly rather than
-  `tsc && vite build`, so a strict type-nit doesn't block the runtime image —
-  keep type-checking in CI/lint.
-- Pre-existing product gaps still open: **Payment module** and **Reviews /
-  Favourites** modules are referenced (tables/config exist) but not implemented;
-  booking reminders have no scheduler; slot availability ignores service
-  duration. These are out of scope for these two PRs.
+- Duration conflicts are checked server-side, but simultaneous requests with
+  different start times are not fully serialized because Redis locks are still
+  keyed by exact start slot. A staff+date lock or DB exclusion constraint is the
+  recommended hardening.
+- The frontend Docker image intentionally runs `vite build` rather than the
+  stricter `tsc && vite build`; keep an explicit compatible TypeScript check in CI.
+- Razorpay signature verification is skipped only when no key secret is
+  configured for local development. A real deployment must always provide the
+  secret.
+- A live Docker/browser run could not be performed in the authoring sandbox
+  (no Docker daemon and frontend packages unavailable). The cycle removal and
+  auth paths were statically cross-verified; run the exact browser checks in
+  `HANDOFF.md` before merging.

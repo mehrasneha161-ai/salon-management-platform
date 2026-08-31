@@ -101,6 +101,20 @@ git checkout chore/dockerise-full-stack
 5. Re-applied the two PR #1 fixes (attendance crash, `booking_ref`) which were
    missing on this branch.
 
+### Fix C9 — production white screen / circular module initialization
+1. Traced the runtime cycle as
+   `store.ts → authApi.ts → axiosBaseQuery.ts → axiosInstance.ts → store.ts`.
+2. Removed the store singleton import from `axiosInstance.ts` and exported
+   `setupAxiosInterceptors(storeLike)` with only the required auth state and
+   dispatch contract.
+3. `store.ts` now calls setup only after `configureStore(...)` returns. A
+   module-level guard makes setup idempotent for duplicate calls/HMR.
+4. Converted every `RootState`-only component import to `import type`, leaving
+   `main.tsx` as the sole external runtime importer of the store.
+5. Cross-verified unchanged auth behaviour: token injection; one refresh for
+   concurrent 401s; queued retries with the new token; and queue rejection,
+   logout, and `/login` redirect when refresh fails.
+
 ### Dockerisation
 1. **Frontend image:** Node build stage runs `npx vite build` → `dist`; nginx
    stage serves `dist` and uses `nginx.conf`.
@@ -331,6 +345,41 @@ In the browser at http://localhost:5173:
   days, a **status dropdown**, **Check in / Check out**, and today's assigned
   bookings with a *Complete* action; the **Attendance** page shows full history.
 
+### 4i. Frontend white-screen fix (C9)
+Use a clean production frontend build so the browser cannot reuse the broken
+hashed bundle:
+
+```bash
+# From the repository root on chore/dockerise-full-stack
+docker compose build --no-cache frontend
+docker compose up -d frontend
+docker compose ps frontend
+```
+
+Then open http://localhost:5173 in a private window (or hard-refresh and clear
+site data) and verify:
+1. The login page renders; the console has no `Cannot access ... before
+   initialization` error and the page is not white.
+2. Log in as the seeded admin. Protected API requests include the Bearer token
+   and the dashboard renders.
+3. Leave the page open until the access token expires (or test with a short
+   expiry): several simultaneous API 401s cause one refresh request; queued
+   calls retry successfully rather than repeatedly refreshing.
+4. Invalidate/delete the refresh token and trigger a 401: auth storage is
+   cleared and the browser redirects to `/login`.
+5. Navigate through customer/admin/staff routes and refresh a deep link to
+   confirm the SPA still initializes normally.
+
+Optional import-graph check from the repository root:
+
+```bash
+grep -R "app/store" frontend/src --include='*.ts' --include='*.tsx'
+```
+
+**Expected:** `main.tsx` has the only runtime `import { store }`; all component
+`RootState` imports say `import type`; `axiosInstance.ts` does not import
+`app/store` at all.
+
 ## 5. Local testing — Option B: run natively (for active development)
 
 Useful if you want hot-reload instead of rebuilding images.
@@ -376,13 +425,18 @@ docker compose down -v       # also delete Postgres/Redis/MinIO data (fresh star
 | Login fails for admin | Use phone `9999999999` / `Admin@123`. If you ran `down -v`, the seed re-applies on next `up`. |
 | Image uploads fail | Check `docker compose logs minio-init` shows "minio bucket ready" and the `salon-assets` bucket exists in the MinIO console. |
 | Flyway "validate" error on boot | Means an entity/table mismatch; check `docker compose logs backend`. (Verified clean for the current entities.) |
+| White screen with `Cannot access ... before initialization` after pulling | The browser/container still has the old hashed bundle. Run `docker compose build --no-cache frontend && docker compose up -d frontend`, then hard-refresh or use a private window. Confirm `axiosInstance.ts` has no store import. |
 
 ---
 
 ## 8. Notes for the reviewer
 - A live `docker compose up` was **not run in the authoring environment** (no
-  Docker daemon available there). Every change was cross-checked by tracing the
-  runtime paths and the entity↔schema alignment. Please do a local bring-up to
-  confirm before merging.
-- The admin/staff pages are **placeholders** so the build and routes work; full
-  functionality is a good next PR.
+  Docker daemon available there). The frontend production build was also
+  unavailable because dependencies could not be downloaded; the sandbox's
+  global TypeScript version rejects the repository's pre-existing `baseUrl`
+  configuration before checking source files. `git diff --check`, the complete
+  import graph, and all auth/refresh paths were cross-verified statically.
+  Please perform §4i's clean production build and browser checks before merging.
+- The admin/staff screens are real API-driven pages. Payment, reminders,
+  duration-aware slots, reviews, and favourites are implemented; the current
+  remaining technical limitations are maintained in `IMPLEMENTATION.md`.
