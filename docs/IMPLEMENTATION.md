@@ -149,6 +149,32 @@ entire stack.** Several things blocked a clean bring-up; each was fixed.
   which holds a confirmed booking is not re-validated — consistent with the
   existing create flow.
 
+### C2. Configurable working hours + staff leave
+- **Problem fixed:** working hours were hardcoded (09:00–20:00) in
+  `SlotAvailabilityService`, there was no per-outlet/per-staff timing, and no
+  leave concept — so a staff member on holiday still showed available slots.
+- **What was added:**
+  - **Outlet business hours** — `opening_time` / `closing_time` on `outlets`
+    (default 09:00–20:00), settable via the outlet create/update API.
+  - **Per-staff shift** — optional `shift_start` / `shift_end` on
+    `staff_profiles` (NULL = follow outlet hours), settable via
+    `PUT /api/v1/staff/{id}/shift`.
+  - **Staff leave** — new `staff_leaves` table + endpoints
+    `POST/GET /api/v1/staff/{id}/leave` and `DELETE /api/v1/staff/leave/{leaveId}`.
+  - **Slot engine** now: returns **no slots** if the staff is on leave that day;
+    otherwise builds the grid from the **effective window = outlet hours
+    narrowed by the staff shift** (and returns empty for an invalid/empty window).
+- **Migration:** `V2__working_hours_and_leaves.sql` (adds the columns + the
+  `staff_leaves` table).
+- **Files:** `V2__...sql`, `outlet/entity/Outlet.java`,
+  `staff/entity/StaffProfile.java`, `staff/entity/StaffLeave.java` (new),
+  `staff/repository/StaffLeaveRepository.java` (new),
+  `booking/service/SlotAvailabilityService.java`,
+  `staff/service/StaffService(Impl).java`, `staff/controller/StaffController.java`,
+  new DTOs `UpdateShiftRequest`, `LeaveRequest`, `LeaveResponse`,
+  `staff/dto/response/StaffResponse.java`, and the outlet request/response +
+  `OutletServiceImpl`.
+
 ---
 
 ## Full list of changed / added files

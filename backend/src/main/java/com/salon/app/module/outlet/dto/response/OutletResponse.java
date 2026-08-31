@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.UUID;
 
 @Data
@@ -18,5 +19,7 @@ public class OutletResponse {
     private BigDecimal latitude;
     private BigDecimal longitude;
     private boolean isActive;
+    private LocalTime openingTime;
+    private LocalTime closingTime;
     private Instant createdAt;
 }

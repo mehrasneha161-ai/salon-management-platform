@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.UUID;
 
 @Data
@@ -19,6 +20,8 @@ public class StaffResponse {
     private String status;
     private UUID outletId;
     private String outletName;
+    private LocalTime shiftStart;
+    private LocalTime shiftEnd;
     private long totalPresentDays;
     private Instant createdAt;
 }

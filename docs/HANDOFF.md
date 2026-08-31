@@ -58,6 +58,18 @@ git checkout chore/dockerise-full-stack
 4. Frontend: `rescheduleBooking` RTK Query mutation + a Reschedule button and
    modal (DatePicker + TimePicker) in *My Bookings*.
 
+### Feature C2 — Configurable working hours + staff leave
+1. Migration `V2` adds `outlets.opening_time/closing_time`,
+   `staff_profiles.shift_start/shift_end`, and the `staff_leaves` table.
+2. Entities updated (`Outlet`, `StaffProfile`) + new `StaffLeave` +
+   `StaffLeaveRepository`.
+3. `SlotAvailabilityService.getAvailableSlots` now short-circuits to empty when
+   the staff is on leave, and builds slots from the intersection of outlet hours
+   and the staff shift.
+4. New endpoints: `PUT /staff/{id}/shift`, `POST/GET /staff/{id}/leave`,
+   `DELETE /staff/leave/{leaveId}`; outlet hours flow through the outlet
+   create/update API.
+
 ### Dockerisation
 1. **Frontend image:** Node build stage runs `npx vite build` → `dist`; nginx
    stage serves `dist` and uses `nginx.conf`.
@@ -210,6 +222,32 @@ curl -i -X PUT $BASE/bookings/$BOOKING_ID/reschedule \
 Expected: `200` with the updated booking (new date/time, status `SLOT_LOCKED`).
 If the target slot is being booked by someone else → `409` `SLOT_ALREADY_LOCKED`.
 Rescheduling to the exact same slot → `400` with a clear message.
+
+### 4d. Working hours + leave (Feature C2)
+Using an ADMIN token (`$ADMIN`) and an existing `$STAFF_ID` / `$OUTLET_ID`:
+```bash
+BASE=http://localhost:8080/api/v1
+
+# Set outlet hours 10:00–18:00 (send with an outlet update)
+# (include the outlet's required name/address fields in the body too)
+
+# Set a staff shift 12:00–16:00
+curl -i -X PUT $BASE/staff/$STAFF_ID/shift -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' -d '{"shiftStart":"12:00","shiftEnd":"16:00"}'
+
+# Available slots now only span the effective window (12:00–15:30)
+curl -s "$BASE/slots/available?outletId=$OUTLET_ID&staffId=$STAFF_ID&date=2026-12-01&durationMinutes=30"
+
+# Put the staff on leave for that day
+curl -i -X POST $BASE/staff/$STAFF_ID/leave -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' \
+  -d '{"startDate":"2026-12-01","endDate":"2026-12-01","reason":"Holiday"}'
+
+# Slots for that date are now EMPTY (on leave) even if attendance exists
+curl -s "$BASE/slots/available?outletId=$OUTLET_ID&staffId=$STAFF_ID&date=2026-12-01&durationMinutes=30"
+```
+Expected: after setting the shift, slots are limited to the shift window; after
+adding leave, the slot list for that date is `[]`.
 
 ## 5. Local testing — Option B: run natively (for active development)
 

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalTime;
 
 @Data
 public class OutletRequest {
@@ -16,4 +17,7 @@ public class OutletRequest {
     private BigDecimal latitude;
     private BigDecimal longitude;
     private boolean isActive = true;
+    // Business hours (optional; default 09:00–20:00 if omitted).
+    private LocalTime openingTime;
+    private LocalTime closingTime;
 }
