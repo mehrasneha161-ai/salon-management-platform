@@ -40,6 +40,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     Optional<Booking> findByBookingRefAndIsDeletedFalse(String bookingRef);
 
+    boolean existsByBookingRef(String bookingRef);
+
     @Query("SELECT b FROM Booking b WHERE b.status = 'SLOT_LOCKED' " +
            "AND b.updatedAt < :cutoff")
     List<Booking> findExpiredLockedBookings(java.time.Instant cutoff);
